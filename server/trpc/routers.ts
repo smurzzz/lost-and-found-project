@@ -25,6 +25,8 @@ import {
   findMatchesForReport,
   listReportsForStudent,
 } from "../services/lost-report-service";
+import { buildTagData } from "../services/tag-service";
+import { logFoundItemSchema } from "../../shared/validation";
 import {
   listNotifications,
   markNotificationRead,
@@ -51,24 +53,23 @@ export const appRouter = baseRouter({
     byId: publicProcedure
       .input(z.object({ id: z.string().uuid() }))
       .query(({ input }) => getFoundItem(input.id)),
+    /**
+     * Log a found item. Input is validated by the shared Phase 3 contract
+     * (logFoundItemSchema) — invalid/missing fields return field-level issues.
+     */
     log: staffOnlyProcedure
-      .input(
-        z.object({
-          name: z.string().min(1).max(120),
-          category: z.string().min(1).max(60),
-          location: z.string().min(1).max(160),
-          foundDate: dateString,
-          imageUrl: z.string().url().nullish(),
-        }),
-      )
+      .input(logFoundItemSchema)
       .mutation(({ ctx, input }) =>
         logFoundItem({
           ...input,
-          imageUrl: input.imageUrl ?? null,
           staffId: ctx.user.id,
           staffName: ctx.user.name,
         }),
       ),
+    /** Render the printable tag (QR data URL + item summary) for an item. */
+    tag: staffOnlyProcedure
+      .input(z.object({ itemId: z.string().uuid() }))
+      .query(({ input }) => buildTagData(input.itemId)),
     /** Staff scan: resolves a QR payload to item + pending claim. */
     scan: staffOnlyProcedure
       .input(z.object({ qrCode: z.string().min(4) }))

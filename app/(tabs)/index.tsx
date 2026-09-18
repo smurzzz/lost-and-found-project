@@ -19,6 +19,16 @@ import {
   ReticleCorner,
   type LineIconName,
 } from "@/components/icons";
+import {
+  ClaimItService,
+  type TagData,
+} from "@/lib/claimit-service";
+import { renderTagHtml } from "@/lib/tag-html";
+import { printTag } from "@/lib/tag-printer";
+import {
+  formatIssues,
+  logFoundItemSchema,
+} from "@/shared/validation";
 
 type ScreenKey =
   | "login"
@@ -933,6 +943,51 @@ function StaffHome({ go }: { go: (screen: ScreenKey) => void }) {
 /* -------------------------------- log found --------------------------------- */
 
 function LogFound({ go }: { go: (screen: ScreenKey) => void }) {
+  // Phase 3: shared validation contract (shared/validation.ts) drives the
+  // same approved layout — errors appear under each card.
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState<"">("");
+  const [description, setDescription] = useState("");
+  const [location, setLocation] = useState("");
+  const [foundDate, setFoundDate] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async () => {
+    const parsed = logFoundItemSchema.safeParse({
+      name,
+      category: category || undefined,
+      location,
+      foundDate: foundDate ? new Date(foundDate).toISOString() : new Date().toISOString(),
+      description: description || undefined,
+    });
+    if (!parsed.success) {
+      setErrors(formatIssues(parsed.error));
+      return;
+    }
+    setErrors({});
+    setSubmitting(true);
+    try {
+      const item = await ClaimItService.logFoundItem({
+        name: parsed.data.name,
+        category: parsed.data.category,
+        location: parsed.data.location,
+        foundDate: parsed.data.foundDate,
+      });
+      showAlert("Item Logged", `${item.name} received QR tag ${item.qrCode}.`);
+      go("qr-tag");
+    } catch (error) {
+      showAlert("Could not log item", error instanceof Error ? error.message : "Try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const fieldError = (key: string) =>
+    errors[key] ? (
+      <Text className="mt-1.5 px-1 text-xs font-medium text-red-500">{errors[key]}</Text>
+    ) : null;
+
   return (
     <ScreenContainer className="px-0" containerClassName="bg-app-bg">
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
@@ -941,9 +996,21 @@ function LogFound({ go }: { go: (screen: ScreenKey) => void }) {
           Log Found Item
         </Text>
         <View className="gap-3.5 px-5">
+          <FormCard label="Item name">
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="e.g. Navy Backpack"
+              placeholderTextColor="#94A3B8"
+              className="rounded-xl border border-[#E2E8F0] px-3.5 py-3 text-[15px] text-slate-700"
+            />
+            {fieldError("name")}
+          </FormCard>
           <FormCard label="Category">
             <View className="relative flex-row items-center">
               <TextInput
+                value={category}
+                onChangeText={(v) => setCategory(v as typeof category)}
                 placeholder="Select category"
                 placeholderTextColor="#64748B"
                 className="flex-1 rounded-xl border border-[#E2E8F0] px-3.5 py-3 text-[15px] text-slate-500"
@@ -952,15 +1019,19 @@ function LogFound({ go }: { go: (screen: ScreenKey) => void }) {
                 <LineIcon name="chevron-right" size={16} color="#334155" strokeWidth={2.2} />
               </View>
             </View>
+            {fieldError("category")}
           </FormCard>
           <FormCard label="Description">
             <TextInput
+              value={description}
+              onChangeText={setDescription}
               multiline
               placeholder="Describe the item (brand, color, details)"
               placeholderTextColor="#94A3B8"
               className="rounded-xl border border-[#E2E8F0] px-3.5 py-3 text-[15px] text-slate-700"
               textAlignVertical="top"
             />
+            {fieldError("description")}
           </FormCard>
           <FormCard label="Found location">
             <View className="relative flex-row items-center">
@@ -968,11 +1039,14 @@ function LogFound({ go }: { go: (screen: ScreenKey) => void }) {
                 <LineIcon name="map-pin" size={20} color="#64748B" strokeWidth={1.8} />
               </View>
               <TextInput
+                value={location}
+                onChangeText={setLocation}
                 placeholder="e.g. Main entrance, Library, Room 204"
                 placeholderTextColor="#94A3B8"
                 className="flex-1 rounded-xl border border-[#E2E8F0] py-3 pl-11 pr-3.5 text-[15px] text-slate-700"
               />
             </View>
+            {fieldError("location")}
           </FormCard>
           <FormCard label="Found date">
             <View className="relative flex-row items-center">
@@ -980,11 +1054,14 @@ function LogFound({ go }: { go: (screen: ScreenKey) => void }) {
                 <LineIcon name="calendar" size={20} color="#64748B" strokeWidth={1.8} />
               </View>
               <TextInput
+                value={foundDate}
+                onChangeText={setFoundDate}
                 placeholder="Today"
                 placeholderTextColor="#94A3B8"
                 className="flex-1 rounded-xl border border-[#E2E8F0] py-3 pl-11 pr-3.5 text-[15px] text-slate-700"
               />
             </View>
+            {fieldError("foundDate")}
           </FormCard>
           <FormCard label="Optional photo">
             <Pressable className="flex-row items-center gap-3.5 rounded-xl border border-dashed border-[#CBD5E1] p-4">
@@ -997,7 +1074,11 @@ function LogFound({ go }: { go: (screen: ScreenKey) => void }) {
           </FormCard>
         </View>
         <View className="px-5 pt-4">
-          <PrimaryButton label="Log Found Item" onPress={() => go("qr-tag")} rounded={false} />
+          <PrimaryButton
+            label={submitting ? "Logging…" : "Log Found Item"}
+            onPress={submit}
+            rounded={false}
+          />
         </View>
         <View className="mt-4 flex-row items-center justify-center gap-2">
           <LineIcon name="shield" size={18} color="#64748B" />
@@ -1014,6 +1095,42 @@ function LogFound({ go }: { go: (screen: ScreenKey) => void }) {
 /* ---------------------------------- qr tag ---------------------------------- */
 
 function QrTag({ go }: { go: (screen: ScreenKey) => void }) {
+  // Phase 3: real tag data from the API when available (QR PNG data URL);
+  // prototype mode keeps the approved layout with mock values.
+  const [tag, setTag] = useState<TagData | null>(null);
+  const [printing, setPrinting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    ClaimItService.listItems()
+      .then((items) => {
+        if (cancelled || !items[0]) return;
+        return ClaimItService.getItemTag(items[0].id).then((t) => {
+          if (!cancelled) setTag(t);
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const print = async () => {
+    if (!tag) {
+      showAlert("Print Tag", "The QR tag is ready to print.");
+      return;
+    }
+    setPrinting(true);
+    try {
+      await printTag({ html: renderTagHtml(tag), jobName: `ClaimIt tag ${tag.item.qrCode}` });
+    } catch {
+      showAlert("Print Tag", "The QR tag is ready to print.");
+    } finally {
+      setPrinting(false);
+    }
+  };
+
+  const display = tag?.item;
   return (
     <ScreenContainer className="px-6" containerClassName="bg-app-bg">
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
@@ -1036,7 +1153,15 @@ function QrTag({ go }: { go: (screen: ScreenKey) => void }) {
         </View>
         <View className="items-center rounded-3xl border border-slate-100 bg-white p-5">
           <View className="mb-3 rounded-2xl border-2 border-emerald-400 bg-white p-3 shadow-sm">
-            <QrArtwork size={176} />
+            {tag?.qrDataUrl ? (
+              <Image
+                source={{ uri: tag.qrDataUrl }}
+                className="h-[176px] w-[176px]"
+                resizeMode="contain"
+              />
+            ) : (
+              <QrArtwork size={176} />
+            )}
           </View>
           <View className="mb-5 flex-row items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1">
             <LineIcon name="shield" size={14} color="#047857" />
@@ -1051,9 +1176,11 @@ function QrTag({ go }: { go: (screen: ScreenKey) => void }) {
             </View>
             <View>
               <Text className="text-base font-bold leading-tight text-slate-900">
-                Navy Backpack
+                {display?.name ?? "Navy Backpack"}
               </Text>
-              <Text className="text-xs font-normal text-slate-500">Bags</Text>
+              <Text className="text-xs font-normal text-slate-500">
+                {display?.category ?? "Bags"}
+              </Text>
             </View>
           </View>
           <View className="w-full gap-2.5">
@@ -1062,7 +1189,9 @@ function QrTag({ go }: { go: (screen: ScreenKey) => void }) {
                 <LineIcon name="map-pin" size={16} color="#94A3B8" strokeWidth={2} />
                 <Text className="text-xs font-medium text-slate-500">Location</Text>
               </View>
-              <Text className="text-xs font-semibold text-slate-800">Library · 2nd floor</Text>
+              <Text className="text-xs font-semibold text-slate-800">
+                {display?.location ?? "Library · 2nd floor"}
+              </Text>
             </View>
             <View className="h-px w-full bg-slate-50" />
             <View className="flex-row items-center justify-between">
@@ -1070,7 +1199,15 @@ function QrTag({ go }: { go: (screen: ScreenKey) => void }) {
                 <LineIcon name="calendar" size={16} color="#94A3B8" strokeWidth={2} />
                 <Text className="text-xs font-medium text-slate-500">Date Logged</Text>
               </View>
-              <Text className="text-xs font-semibold text-slate-800">Apr 26, 2025</Text>
+              <Text className="text-xs font-semibold text-slate-800">
+                {display
+                  ? new Date(display.foundDate).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })
+                  : "Apr 26, 2025"}
+              </Text>
             </View>
             <View className="h-px w-full bg-slate-50" />
             <View className="flex-row items-center justify-between">
@@ -1079,16 +1216,16 @@ function QrTag({ go }: { go: (screen: ScreenKey) => void }) {
                 <Text className="text-xs font-medium text-slate-500">Item ID</Text>
               </View>
               <Text className="text-xs font-semibold tracking-wider text-slate-800">
-                CLM-2048-AX7
+                {display?.qrCode ?? "CLM-2048-AX7"}
               </Text>
             </View>
           </View>
         </View>
         <View className="gap-3 pt-6">
           <PrimaryButton
-            label="Print Tag"
+            label={printing ? "Preparing…" : "Print Tag"}
             tone="emerald"
-            onPress={() => showAlert("Print Tag", "The QR tag is ready to print.")}
+            onPress={print}
             icon={<LineIcon name="printer" size={20} color="#FFFFFF" strokeWidth={2} />}
           />
           <Pressable

@@ -9,7 +9,7 @@
 | 0 | Full-stack foundation setup | Complete | Expo SDK 57 (React Native 0.86.3, React 19.2.3) foundation installed and verified 2026-09-19. Evidence: `pnpm check` clean, `pnpm test -- --run` 3/3 passed, `pnpm lint` 0 problems, `expo install --check` up to date, `expo export --platform android` bundle success, `expo-doctor` 21/21. See Phase 0 evidence below. |
 | 1 | UI and interaction prototype | Review | All 11 screens ported from the approved UI code into `app/(tabs)/index.tsx` on Expo SDK 57, then **redesigned to the approved 9-screen HTML mockups** (new palette, SVG icon set, pin/heart brand marks, QR artwork, scan reticle, audit timeline). Every screen verified live at a mobile viewport (student and staff, incl. release confirmation state). Evidence: `pnpm check`, `pnpm test -- --run` (5/5), `pnpm lint`, Android + web Metro bundles, `expo install --check` up to date, and an interactive browser review. See the frozen UI contract below. |
 | 2 | Backend and database foundation | Review | Schema, migration, auth, and typed tRPC API implemented on Neon PostgreSQL; workflow rules unit-tested (12/12). UI unchanged; screens connect in Phases 3–6. See Phase 2 evidence below. |
-| 3 | Staff logging and QR tags | Not started | Connect the existing Log Found Item and QR Tag Ready screens. |
+| 3 | Staff logging and QR tags | Review | Shared validation contract, collision-safe QR payloads, PNG tag rendering + printing, audit FOUND persistence. Live E2E 12/12 incl. duplicate/missing/invalid cases. See Phase 3 evidence below. |
 | 4 | Student reports and structured matches | Not started | Connect Report Lost Item and Possible Matches. |
 | 5 | QR-verified release | Not started | Connect camera scanning and enforce release on the API. |
 | 6 | Push notifications | Not started | Connect probable-match notifications through Expo. |
@@ -45,6 +45,14 @@ Implemented on Neon PostgreSQL (schema pushed live; `.env` holds credentials, gi
 - **Tooling**: scripts `server`, `server:start`, `db:generate`, `db:migrate`, `db:push`, `db:studio`; `drizzle.config.ts` reads `.env` (unpooled URL preferred for migrations).
 
 Verification evidence: `pnpm check` clean; `pnpm test -- --run` 12/12 (workflow rules, service facade, screen inventory, foundation); `pnpm lint` 0 problems; `pnpm db:push` applied the schema to Neon (roundtrip verified); live E2E smoke (`scripts/e2e-smoke.ts`) passed 9/9 against the running API + Neon — item logged → release blocked without scan → claim submitted → QR scan surfaces claim → release succeeds → audit chain complete → student blocked from staff mutations — with test rows cleaned up. Web bundle exports.
+
+## Phase 3 evidence (2026-09-19)
+
+- **Shared validation** (`shared/validation.ts`): `logFoundItemSchema` (name 2–120, category enum from the UI chips, location 2–160, ISO date, optional URL photo/description) used authoritatively by tRPC, reused by the Log Found form and tests. `QR_CODE_PATTERN` defines the canonical `CLM-XXXX-XXXX-XXXXXXXXXXXXXXXX` payload format.
+- **QR service** (`server/services/qr-service.ts`): opaque, non-sequential payloads via `node:crypto`, collision-safe uniqueness against `found_items.qr_code` (retry on the astronomically unlikely unique-index hit), PNG data URLs and SVG via the `qrcode` package. Payloads carry the identifier only — never item details.
+- **Tag service + printing** (`server/services/tag-service.ts`, `lib/tag-html.ts`, `lib/tag-printer.ts`): `items.tag` renders the QR PNG plus item summary; `lib/tag-html.ts` produces byte-identical printable markup for native (`expo-print` ~57.0.2) and web (hidden-iframe print). `items.log` now re-validates and persists the FOUND audit event (exactly once per item, verified).
+- **UI wiring (layouts unchanged)**: Log Found fields are stateful with field-level error messages from the shared contract; submit calls `ClaimItService.logFoundItem` and shows the returned QR identity; QR Tag Ready renders the real QR PNG when the API is reachable and falls back to the approved mock artwork in prototype mode; Print Tag invokes the platform print pipeline.
+- **Tests**: unit suite extended to 19/19 (validation accept/reject matrix incl. short names, long locations, unknown category, malformed date/URL; QR payload format checks). Live E2E (`scripts/e2e-phase3.ts`) passed 12/12 against API + Neon: valid log → canonical QR → FOUND status → missing/invalid/unknown-category/bad-URL rejections → duplicate logs receive distinct QR payloads → tag renders PNG and carries the payload → unknown-item tag fails cleanly → audit FOUND persisted once. Test rows cleaned up.
 
 ## Frozen UI contract (Phase 1, Step 6)
 

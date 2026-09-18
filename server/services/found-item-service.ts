@@ -8,9 +8,11 @@
 import { and, desc, eq, ne } from "drizzle-orm";
 
 import type { ItemStatus } from "../../shared/workflow";
+import { logFoundItemSchema, type LogFoundItemInput } from "../../shared/validation";
 import { getDb } from "../db/client";
 import { claims, foundItems, users } from "../db/schema";
 import { recordAuditEvent } from "./audit-service";
+import { generateUniqueQrPayload } from "./qr-service";
 
 export type FoundItemDto = {
   id: string;
@@ -38,34 +40,34 @@ export function toItemDto(row: typeof foundItems.$inferSelect): FoundItemDto {
   };
 }
 
-/** Generate an opaque, non-sequential QR payload for a new tag. */
-export function generateQrCode(): string {
-  const bytes = new Uint8Array(9);
-  crypto.getRandomValues(bytes);
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-  return `CLM-${hex.slice(0, 4).toUpperCase()}-${hex.slice(4, 8).toUpperCase()}-${hex.slice(8)}`;
-}
+// QR payload generation moved to qr-service.ts (collision-safe, validated
+// against the shared payload contract).
 
-export async function logFoundItem(input: {
-  name: string;
-  category: string;
-  location: string;
-  foundDate: Date;
-  imageUrl?: string | null;
-  staffId: string;
-  staffName: string;
-}): Promise<FoundItemDto> {
+/**
+ * Staff logs a found item. Validates through the shared contract, assigns
+ * a collision-safe opaque QR payload, and persists the FOUND audit event.
+ * Throws a validation error (`.issues`) on invalid/missing fields.
+ */
+export async function logFoundItem(
+  rawInput: LogFoundItemInput & {
+    staffId: string;
+    staffName: string;
+  },
+): Promise<FoundItemDto> {
+  // Defense in depth: tRPC already parsed this; re-validate for direct calls.
+  const input = logFoundItemSchema.parse(rawInput);
   const db = getDb();
+  const qrCode = await generateUniqueQrPayload();
   const inserted = await db
     .insert(foundItems)
     .values({
       name: input.name,
       category: input.category,
       location: input.location,
-      foundDate: input.foundDate,
+      foundDate: new Date(input.foundDate),
       imageUrl: input.imageUrl ?? null,
-      loggedByStaffId: input.staffId,
-      qrCode: generateQrCode(),
+      loggedByStaffId: rawInput.staffId,
+      qrCode,
       status: "FOUND",
       qrTagReady: true,
     })
@@ -73,8 +75,8 @@ export async function logFoundItem(input: {
   const item = inserted[0];
   await recordAuditEvent({
     foundItemId: item.id,
-    actorId: input.staffId,
-    actorName: input.staffName,
+    actorId: rawInput.staffId,
+    actorName: rawInput.staffName,
     action: "FOUND",
     detail: `Item logged at ${input.location}`,
   });

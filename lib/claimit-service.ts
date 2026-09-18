@@ -80,6 +80,17 @@ function toFacadeItem(dto: {
   };
 }
 
+/** The facade's category type mirrors the shared validation contract. */
+type FacadeCategory =
+  | "Electronics"
+  | "Bags"
+  | "Clothing"
+  | "IDs/Cards"
+  | "Keys"
+  | "Wallets"
+  | "Books"
+  | "Other";
+
 function isApiAvailable(): boolean {
   return Boolean(process.env.EXPO_PUBLIC_API_URL);
 }
@@ -155,7 +166,7 @@ export const ClaimItService = {
   /** Staff logs a found item; server assigns the QR identity. */
   logFoundItem(input: {
     name: string;
-    category: string;
+    category: FacadeCategory;
     location: string;
     foundDate: string;
     imageUrl?: string | null;
@@ -287,4 +298,33 @@ export const ClaimItService = {
       () => MOCK_AUDIT.filter((e) => e.foundItemId === itemId),
     );
   },
+
+  /**
+   * Render the printable QR tag for an item (Phase 3). Returns the QR
+   * PNG data URL plus item summary; falls back to the mock artwork shape
+   * in prototype mode so the QR Tag screen still renders.
+   */
+  getItemTag(itemId: string): Promise<TagData> {
+    return withClient(
+      async (c) => {
+        const t = await c.items.tag.query({ itemId });
+        return {
+          item: toFacadeItem(t.item),
+          qrDataUrl: t.qrDataUrl,
+          renderedAt: t.renderedAt,
+        };
+      },
+      () => ({
+        item: MOCK_ITEMS[0],
+        qrDataUrl: "",
+        renderedAt: new Date().toISOString(),
+      }),
+    );
+  },
+};
+
+export type TagData = {
+  item: FoundItem;
+  qrDataUrl: string;
+  renderedAt: string;
 };
