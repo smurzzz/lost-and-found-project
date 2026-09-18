@@ -7,7 +7,7 @@
 | Phase | Scope | Status | Evidence or next action |
 |---|---|---|---|
 | 0 | Full-stack foundation setup | Complete | Expo SDK 57 (React Native 0.86.3, React 19.2.3) foundation installed and verified 2026-09-19. Evidence: `pnpm check` clean, `pnpm test -- --run` 3/3 passed, `pnpm lint` 0 problems, `expo install --check` up to date, `expo export --platform android` bundle success, `expo-doctor` 21/21. See Phase 0 evidence below. |
-| 1 | UI and interaction prototype | Not started | Phase 0 scaffold contains only a placeholder home route (`app/index.tsx`); all student and staff screens from the previous prototype must be rebuilt in this workspace before review. |
+| 1 | UI and interaction prototype | Review | All 11 screens ported from the approved UI code into `app/(tabs)/index.tsx` on Expo SDK 57, then **redesigned to the approved 9-screen HTML mockups** (new palette, SVG icon set, pin/heart brand marks, QR artwork, scan reticle, audit timeline). Every screen verified live at a mobile viewport (student and staff, incl. release confirmation state). Evidence: `pnpm check`, `pnpm test -- --run` (5/5), `pnpm lint`, Android + web Metro bundles, `expo install --check` up to date, and an interactive browser review. See the frozen UI contract below. |
 | 2 | Backend and database foundation | Not started | Define schema and API only after Phase 1 approval. |
 | 3 | Staff logging and QR tags | Not started | Connect the existing Log Found Item and QR Tag Ready screens. |
 | 4 | Student reports and structured matches | Not started | Connect Report Lost Item and Possible Matches. |
@@ -32,6 +32,51 @@ Verification evidence: `pnpm check` (tsc strict, no errors), `pnpm test -- --run
 
 Environment configuration: copy `.env.example` to `.env` when Phase 2 begins; no secrets are committed.
 
+## Frozen UI contract (Phase 1, Step 6)
+
+Frozen 2026-09-19 pending stakeholder approval. Backend work (Phase 2) may begin only after approval of this contract.
+
+### Navigation model
+
+One application shell (`app/(tabs)/index.tsx`) holds a `ScreenKey` union of 11 screens and switches them in place. A role state (`student` | `staff`) selects the bottom navigation set. Screens never deep-link; the prototype is state-driven.
+
+- Student nav: Home (`student-home`), Report (`report-lost`), Notifications (`matches`), Profile (`profile`)
+- Staff nav: Home (`staff-home`), Scan (`scan-release`), Audit Log (`audit`), Profile (`profile`)
+
+### Screens, inputs, and transitions
+
+| Screen key | Title | Local state | Actions → transitions | Status states displayed |
+|---|---|---|---|---|
+| `login` | ClaimIt onboarding | — | Continue with SSO → student home; Preview Staff Workspace → staff home | — |
+| `student-home` | Find your lost item | selected category chip | item card → claim-verification; lost-report row → matches; Report Lost Item → report-lost; See all → matches | Unclaimed (gray), Pending (amber), Possible match (amber) |
+| `report-lost` | Report a Lost Item | description text | Submit Report → matches; back → student-home | — |
+| `matches` | Possible Matches | — | This is mine → claim-verification; Not mine (inert by design) | Possible Match (amber) |
+| `claim-verification` | Verify Your Claim | verification answer, submitted flag | Submit Claim → shows Claim Submitted banner; back → matches | Claim Submitted (emerald success) |
+| `staff-home` | Staff Dashboard | found/pending tab | pending claim row → scan-release; Log Found Item → log-found | Returned/Pending (emerald/amber), Pending (amber) |
+| `log-found` | Log Found Item | — | Log Found Item → qr-tag; back → staff-home | — |
+| `qr-tag` | QR Tag Ready | — | Print Tag → alert banner; Done → staff-home | Verified by ClaimIt (emerald) |
+| `scan-release` | Scan QR Tag | released flag | Confirm Release → Item Released badge + emerald released state; Cancel → staff-home | Pending claim (amber) → Released (emerald) |
+| `audit` | Audit Log | status filter chip | filter chips filter events (visual) | FOUND, MATCHED, CLAIM REQUESTED, RELEASED timeline with actor + timestamp |
+| `profile` | Profile | role (prop) | Log Out → alert banner | Student/Staff role badge; staff sees Recent Audit Log |
+
+### Data each screen will need from Phase 2
+
+- **Found item**: `id`, `name`, `category`, `location`, `date`, `status`, `image`
+- **Possible match**: found-item fields + originating lost-report reference
+- **Claim**: `claimantName`, `verificationAnswer`, `claimDate`, linked item
+- **Audit event**: `status` (FOUND → MATCHED → CLAIM REQUESTED → RELEASED), `actor`, `timestamp`, `action`, append-only order
+- **Profile**: `name`, `role`, avatar
+
+### Component inventory
+
+`ScreenContainer` (safe areas), `Logo`, `Header` (back + title), `PrimaryButton` (navy/emerald, min 52px), `StatusPill` (gray/amber/emerald), `BottomNav` (role-aware), `ItemCard`, `InputField` (54px single-line, 112px multiline), `InfoRow`, `ProfileRow`, `AlertBanner` (web-safe transient notice replacing `Alert.alert`). Tokens live in `tailwind.config.js`.
+
+### Review findings (deferred, UI-only)
+
+- The matches empty state ("No possible matches yet") is not implemented because mock data always renders two matches; add it when real matching lands in Phase 4.
+- "Not mine" has no destination by design; confirm with stakeholders whether it should dismiss the match.
+- Notification Settings and Help & Support rows are placeholders without destinations.
+
 ## Current UI acceptance checklist
 
 - [x] Student login and onboarding UI.
@@ -48,6 +93,8 @@ Environment configuration: copy `.env.example` to `.env` when Phase 2 begins; no
 - [x] Student and Staff Profile UI.
 - [x] Student and Staff bottom navigation.
 - [x] TypeScript check and UI inventory test.
+- [x] Student flow verified at mobile viewport (login → home → report → matches → claim → submitted → profile).
+- [x] Staff flow verified at mobile viewport (dashboard tabs → log found → QR tag → scan → confirm release → audit → profile).
 - [ ] Stakeholder approval of the UI contract.
 
 ## Update procedure

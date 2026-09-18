@@ -6,7 +6,7 @@ ClaimIt is implemented in phases. **The UI and interaction model are built first
 
 ## Current UI architecture
 
-The current prototype uses Expo Router as the application entry point and a single UI shell in `app/(tabs)/index.tsx`. The shell contains local screen state, shared visual components, mock data, role switching, student navigation, and staff navigation. NativeWind classes provide styling, while `theme.config.js` defines the palette tokens.
+The prototype runs on Expo SDK 57 (React Native 0.86, React 19.2) with Expo Router as the entry point and a single UI shell in `app/(tabs)/index.tsx`. The shell contains a `ScreenKey` union of 11 screens, local screen state, shared visual components, mock data, role switching, student navigation, and staff navigation. NativeWind 4.2 classes provide styling, and `tailwind.config.js` defines the palette tokens. The frozen screen contract lives in `progress-tracker.md`.
 
 The prototype screens are:
 
