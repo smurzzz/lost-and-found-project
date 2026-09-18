@@ -12,7 +12,7 @@ This document records why each major library exists and when it should be used.
 | React state | Local prototype state and form interactions | UI | Appropriate while the UI is being reviewed. |
 | TypeScript | Static typing | All phases | Required for new source files. |
 | Clerk | Student/staff authentication and role access | Backend phase | Add only after login UI and role flows are approved. |
-| Supabase PostgreSQL | Persistent items, reports, claims, notifications, and audit events | Database phase | Add schema and policies after entity definitions are approved. |
+| Neon PostgreSQL | Persistent items, reports, claims, notifications, and audit events | Database phase | Connect via `DATABASE_URL` with the `postgres` driver and Drizzle migrations. Replaced Supabase (2026-09-19) because Supabase's free tier limits active projects; Neon has no such cap. |
 | QR generation library | Create printable QR tag payloads | Backend integration phase | Tag payload must contain an opaque item identifier, not sensitive data. |
 | Camera scanner library | Scan item QR tags on staff devices | Backend integration phase | Request camera permission and handle invalid or stale tags. |
 | Expo Notifications | Push probable-match notifications | Notifications phase | Use push only; the proposal excludes SMS. |

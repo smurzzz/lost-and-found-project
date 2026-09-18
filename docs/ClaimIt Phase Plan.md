@@ -22,7 +22,7 @@ The project uses `expo`, `react`, `react-native`, `expo-router`, `react-native-s
 
 ### Database foundation
 
-`drizzle-orm` and `drizzle-kit` are already installed to define typed database tables and generate migrations. `postgres` is installed as the PostgreSQL driver for a future PostgreSQL connection. `mysql2` remains in the scaffold because the generated project template supports database alternatives; ClaimIt should standardize on PostgreSQL if the proposal's Supabase direction is approved. `@supabase/supabase-js` is installed for the planned Supabase project URL, anonymous client access, and server-side integrations. The database schema and migrations are intentionally deferred until the UI contract is approved.
+`drizzle-orm` and `drizzle-kit` are already installed to define typed database tables and generate migrations. `postgres` is installed as the PostgreSQL driver for a future PostgreSQL connection. ClaimIt standardizes on **Neon PostgreSQL** (updated 2026-09-19: the original Supabase direction was replaced because Supabase's free tier limits active projects and blocked project creation; Neon provides the same PostgreSQL with pooled connection strings and no active-project cap). `@supabase/supabase-js` has been removed from the dependency set. The database schema and migrations are intentionally deferred until the UI contract is approved.
 
 ### Authentication foundation
 

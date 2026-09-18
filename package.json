@@ -14,14 +14,19 @@
     "check": "tsc --noEmit",
     "test": "vitest",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "server": "tsx watch server/index.ts",
+    "server:start": "tsx server/index.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@clerk/backend": "^3.18.1",
     "@clerk/expo": "^4.6.8",
     "@expo/vector-icons": "^15.1.1",
     "@react-native-async-storage/async-storage": "2.2.0",
-    "@supabase/supabase-js": "^2.116.0",
     "@tanstack/react-query": "^5.103.1",
     "@trpc/client": "^11.19.0",
     "@trpc/react-query": "^11.19.0",

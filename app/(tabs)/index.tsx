@@ -322,7 +322,7 @@ function LoginScreen({
           </View>
           <View className="mb-3 mt-auto">
             <PrimaryButton
-              label="Continue with SSO"
+              label="Continue with Google"
               onPress={() => {
                 setRole("student");
                 go("student-home");

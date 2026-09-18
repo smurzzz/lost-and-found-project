@@ -36,10 +36,10 @@ Screen components and navigation
 Feature services and typed state
         |
         v
-REST API with role and workflow enforcement
+REST API with role and workflow enforcement (tRPC over Express; `staffOnly` custody mutations)
         |
         +--> Clerk authentication and role claims
-        +--> Supabase PostgreSQL
+        +--> Neon PostgreSQL
         +--> QR generation and camera scanning
         +--> Expo push notifications
         +--> Audit event persistence

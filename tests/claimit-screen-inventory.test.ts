@@ -26,7 +26,7 @@ describe("ClaimIt UI screen inventory", () => {
   });
 
   it("contains the core ClaimIt verification copy", () => {
-    expect(source).toContain("Continue with SSO");
+    expect(source).toContain("Continue with Google");
     expect(source).toContain("Submit Claim");
     expect(source).toContain("Confirm Release");
     expect(source).toContain("Every found item receives a unique QR tag.");

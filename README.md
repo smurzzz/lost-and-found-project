@@ -26,7 +26,7 @@ See `docs/ClaimIt Phase Plan.md` for the full plan and `docs/ClaimIt Progress Tr
 - Expo SDK 57 (React Native 0.86, React 19.2) with expo-router
 - NativeWind 4.2 (Tailwind CSS 3) styling, ClaimIt token palette in `tailwind.config.js`
 - Typed API foundation: tRPC 11 + TanStack Query + zod (not yet wired)
-- Backend foundation: Express 5 + tsx/esbuild (not yet implemented)
-- Database foundation: Drizzle ORM/Kit + postgres driver + Supabase client (schema deferred)
+- Backend (Phase 2): tRPC 11 + superjson over Express 5 — `pnpm server` (Clerk JWT auth; dev tokens with `ALLOW_DEV_LOGIN=true`)
+- Database (Phase 2): Drizzle ORM/Kit on Neon PostgreSQL — schema applied; `pnpm db:push` / `pnpm db:migrate`
 - Auth foundation: Clerk (`@clerk/expo`, `@clerk/backend`) — keys not connected
 - QR/device foundation: `qrcode`, `expo-camera`, `expo-notifications` — inactive until their phases
