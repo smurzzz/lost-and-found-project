@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "ClaimIt",
+    "slug": "claimit",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "claimit",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.claimit.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#172554"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "backgroundColor": "#172554"
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "ClaimIt uses the camera to scan item QR tags during verified release."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#10B981"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

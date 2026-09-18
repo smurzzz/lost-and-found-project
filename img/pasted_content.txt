@@ -1,0 +1,527 @@
+We are designing "ClaimIt", a modern MOBILE APPLICATION for Android — a school Lost & Found system built around a QR-CODE-VERIFIED CLAIMING PROCESS.
+
+IMPORTANT DESIGN DIRECTION:
+Use the attached reference image as the PRIMARY VISUAL INSPIRATION for the UI style, composition, spacing, cards, and overall aesthetic.
+
+The final design should feel like a polished modern startup/mobile product, not a generic school management system.
+
+VISUAL STYLE:
+- Clean, minimal, premium mobile UI
+- Soft, calm, friendly, trustworthy aesthetic
+- Inspired by the reference: rounded smartphone-style layouts, floating cards, soft shadows, large rounded corners, subtle depth, clean white surfaces, and generous whitespace
+- Use slightly off-white/light gray backgrounds instead of pure white everywhere
+- Use rounded cards and containers with approximately 16–24px corner radius
+- Use subtle shadows and elevation to create depth
+- Use large, visually appealing item thumbnails/photos
+- Use simple outlined icons with consistent stroke weight
+- Avoid overly dense dashboards
+- Avoid excessive borders and unnecessary decorative elements
+- Use clear visual hierarchy with large headings and compact supporting text
+- Keep everything optimized for one-handed mobile use
+- All important buttons and touch targets should be at least 48px
+- 16px horizontal page margins
+- Single-column mobile layouts
+- Bottom navigation should look modern and floating/soft, inspired by the reference
+- Use subtle micro-interactions and selected states
+- Maintain strong accessibility and readable contrast
+
+COLOR PALETTE:
+Primary Navy: #172554
+Dark Navy: #0F172A
+Emerald: #10B981
+Light Emerald: #D1FAE5
+Amber: #F59E0B
+Light Amber: #FEF3C7
+Neutral Background: #F5F7F8
+Card White: #FFFFFF
+Primary Text: #0F172A
+Secondary Text: #64748B
+Border/Divider: #E2E8F0
+Muted Gray: #94A3B8
+
+COLOR USAGE:
+- Navy = primary structure, headings, navigation, primary buttons
+- Emerald = verified, claimed, successful, released states
+- Amber = pending matches and pending claims
+- Gray = searching, unclaimed, default states
+- Red should only be used for destructive actions such as Log Out confirmation
+- Do not make the entire application dark navy
+- Keep the overall interface light, airy, and soft
+
+TYPOGRAPHY:
+Use Inter throughout.
+- Large bold headings
+- Medium-weight section headings
+- Regular body text
+- Small muted metadata
+- Avoid excessive uppercase text
+- Keep typography simple and highly readable
+
+BRAND:
+App name: ClaimIt
+Tagline:
+"Lost something? Found something? Let's get it back."
+
+The app's main visual identity should communicate:
+TRUST + VERIFICATION + SIMPLICITY + RECOVERY
+
+Do NOT include:
+- AI photo matching
+- AI-generated matching visuals
+- SMS/text messaging
+- Emergency contacts
+- Social/community features
+- Scoring systems
+- Ranking systems
+- Gamification
+- Unattended self-service pickup
+- Manual email/password login
+- Accessibility settings screen
+- Complex analytics charts
+- Excessive admin-dashboard style layouts
+
+CORE CONCEPT:
+Every found item is logged by Staff and automatically receives a unique QR code/tag.
+
+A student can submit a claim, but an item can ONLY be marked "Claimed" or "Released" after a Staff member scans the item's QR code and confirms the release.
+
+USER ROLES:
+1. STUDENT
+- Report lost items
+- Browse found items
+- Receive possible match notifications
+- Submit claims
+- Track claim status
+- View profile
+
+2. STAFF
+- Log found items
+- Generate QR tags
+- Scan QR codes
+- Review pending claims
+- Confirm item releases
+- View chronological audit history
+
+--------------------------------------------------
+SCREEN 1 — LOGIN
+--------------------------------------------------
+
+Create a visually attractive onboarding/login screen inspired by the reference image.
+
+Layout:
+- Small ClaimIt logo/illustration near the top
+- Large friendly heading:
+  "Lost something?"
+- Supporting tagline:
+  "Found something? Let's get it back."
+- Short explanation:
+  "Every found item is securely tagged with a QR code and verified by staff before release."
+- Large rounded "Continue with SSO" button
+- Google/SSO icon inside the button
+- No email/password fields
+- Small Terms of Service and Privacy Policy text at bottom
+
+Visual:
+- Large soft hero illustration related to lost-and-found items
+- Soft circular/abstract background shapes
+- Lots of whitespace
+- Rounded floating elements inspired by the reference
+
+--------------------------------------------------
+SCREEN 2 — STUDENT HOME
+--------------------------------------------------
+
+Make this feel like the main discovery screen shown in the reference.
+
+Top:
+- Greeting such as "Good morning, Alex"
+- Small profile avatar
+- Large heading:
+  "Find your lost item"
+- Rounded search bar:
+  "Search found items..."
+
+Below:
+Horizontal scrollable category chips:
+- All
+- Electronics
+- Bags
+- Clothing
+- IDs/Cards
+- Other
+
+Found Items section:
+Display visually rich rounded cards with large item photos.
+
+Each card:
+- Item photo
+- Item name
+- Category
+- Found location
+- Found date
+- Status
+
+Use subtle status indicators:
+- Gray = Unclaimed
+- Amber = Pending
+- Emerald = Claimed/Released
+
+Below:
+"My Lost Reports"
+
+Show the student's own reports as compact cards.
+
+Statuses:
+- Searching — gray
+- Possible match found — amber
+- Claimed — emerald
+
+Prominent floating/rounded:
+"+ Report Lost Item"
+
+Bottom navigation:
+Home | Report | Notifications | Profile
+
+Use modern outlined icons and a soft selected-state background.
+
+--------------------------------------------------
+SCREEN 3 — REPORT LOST ITEM
+--------------------------------------------------
+
+Create a clean mobile form.
+
+Header:
+"Report a Lost Item"
+
+Fields:
+- Category dropdown
+- Item description
+- Date lost
+- Location lost
+- Optional reference photo
+
+Use large rounded input fields.
+
+Add a small information card:
+"Providing accurate details helps staff identify possible matches."
+
+Bottom:
+Large full-width rounded button:
+"Submit Report"
+
+Keep the form simple and uncluttered.
+
+--------------------------------------------------
+SCREEN 4 — SUGGESTED MATCHES
+--------------------------------------------------
+
+This screen is reached from a notification.
+
+Header:
+"Possible Matches"
+
+Supporting text:
+"We found items that may match your lost report."
+
+Display large rounded item cards.
+
+Each card:
+- Large thumbnail
+- Item description
+- Category
+- Found location
+- Found date
+- "This is mine" primary button
+- "Not mine" secondary text/button
+
+Use amber accents to communicate "Possible Match".
+
+If there are no matches:
+Create a beautiful empty state with a simple lost-item illustration.
+
+Text:
+"No possible matches yet"
+"We'll let you know when a found item may match your report."
+
+--------------------------------------------------
+SCREEN 5 — CLAIM VERIFICATION
+--------------------------------------------------
+
+Header:
+"Verify Your Claim"
+
+Show the selected found item in a large rounded card.
+
+Item information:
+- Photo
+- Item name
+- Category
+- Found location
+
+Question:
+"What's distinctive about this item?"
+
+Text input below.
+
+Small explanation:
+"Tell staff something about the item that isn't obvious from the listing."
+
+Primary button:
+"Submit Claim"
+
+After submission, show a clean success/confirmation state:
+
+"Claim Submitted"
+
+"Your claim has been sent to staff for verification. If approved, a staff member will scan the item's QR tag before releasing it to you."
+
+Use emerald confirmation styling.
+
+--------------------------------------------------
+SCREEN 6 — STAFF HOME
+--------------------------------------------------
+
+Staff interface should still feel like the same mobile product.
+
+Top:
+"Staff Dashboard"
+
+Small summary cards:
+- Found Items
+- Pending Claims
+
+Keep these simple and compact — NOT a large desktop-style dashboard.
+
+Two main tabs:
+"Found Items"
+"Pending Claims"
+
+FOUND ITEMS:
+Cards with:
+- Item thumbnail
+- Item name
+- Category
+- Found date
+- QR tag indicator
+- Current status
+
+PENDING CLAIMS:
+Cards with:
+- Claimant name
+- Item name
+- Verification answer
+- Claim date
+- Pending badge
+
+Primary action:
+"+ Log Found Item"
+
+Bottom navigation:
+Home | Scan | Audit Log | Profile
+
+--------------------------------------------------
+SCREEN 7 — LOG FOUND ITEM
+--------------------------------------------------
+
+Header:
+"Log Found Item"
+
+Fields:
+- Category
+- Description
+- Found location
+- Found date (default to today)
+- Optional photo
+
+Primary:
+"Log Found Item"
+
+AFTER SUBMISSION:
+
+Immediately display a beautiful QR Tag screen.
+
+Show:
+- Large generated QR code
+- Item name
+- Item category
+- Found location
+- Found date
+- Unique item ID
+
+Buttons:
+"Print Tag"
+"Done"
+
+The QR code should visually feel like an official verification tag.
+
+--------------------------------------------------
+SCREEN 8 — QR SCAN TO RELEASE
+--------------------------------------------------
+
+Create a full-screen mobile camera scanning interface.
+
+Top:
+"Scan QR Tag"
+
+Camera viewfinder:
+- Darkened camera background
+- Large rounded square scanning target
+- Four corner indicators
+- Subtle emerald scanning accent
+
+Prompt:
+"Scan the item's QR tag to release"
+
+After successful scan:
+
+Show a bottom-sheet confirmation card with:
+- Item photo
+- Item name
+- Claimant name
+- Verification answer
+- Claim status
+
+Buttons:
+"Confirm Release"
+"Cancel"
+
+Use emerald for Confirm Release.
+
+After confirmation:
+Show:
+"Item Released"
+
+with a clear emerald success state.
+
+--------------------------------------------------
+SCREEN 9 — AUDIT LOG
+--------------------------------------------------
+
+Header:
+"Audit Log"
+
+Status filter chips:
+All | Unclaimed | Pending Claim | Claimed
+
+Use a simple chronological timeline/list.
+
+Each item:
+- Item name
+- Status
+- Timestamp
+- Small icon
+
+When tapped, expand:
+
+FOUND
+↓
+MATCHED
+↓
+CLAIM REQUESTED
+↓
+RELEASED
+
+Each event shows:
+- Actor
+- Timestamp
+- Action
+
+Do NOT use charts.
+Do NOT use graphs.
+Do NOT use scores.
+
+This should feel like a clean chronological activity record.
+
+--------------------------------------------------
+SCREEN 10 — PROFILE
+--------------------------------------------------
+
+Create a minimal profile screen.
+
+Top:
+- Large circular profile photo
+- User name
+- Role badge: Student or Staff
+
+Below:
+Rounded list items:
+- Notification Settings
+- Help & Support
+- Log Out
+
+Keep this screen extremely simple.
+
+--------------------------------------------------
+MOBILE DESIGN SYSTEM
+--------------------------------------------------
+
+Apply these rules consistently to EVERY SCREEN:
+
+Spacing:
+- 16px page margins
+- 12–16px gaps between components
+- 24px section spacing
+- Generous whitespace
+
+Cards:
+- 16–24px rounded corners
+- White surfaces
+- Very subtle shadows
+- Avoid heavy borders
+
+Buttons:
+- Minimum 48px height
+- Rounded corners
+- Clear pressed/selected states
+- Navy primary buttons
+- Emerald confirmation buttons
+
+Inputs:
+- Large touch-friendly fields
+- Rounded corners
+- Clear labels
+- Visible focus state
+
+Images:
+- Large rounded thumbnails
+- Use realistic lost-and-found objects such as:
+  backpacks, wallets, phones, keys, IDs, headphones, clothing, bottles
+- Make item imagery visually prominent like the reference design
+
+NAVIGATION:
+Student:
+Home | Report | Notifications | Profile
+
+Staff:
+Home | Scan | Audit Log | Profile
+
+Use a modern bottom navigation bar with:
+- Rounded selected-state container
+- Simple outlined icons
+- Short labels
+- Comfortable spacing
+
+OVERALL VISUAL GOAL:
+
+The final app should look like a polished modern mobile product similar in visual quality and composition to the provided reference image.
+
+Think:
+"Premium modern mobile app + school Lost & Found + QR verification"
+
+NOT:
+"Traditional school information system"
+
+Use the reference image's:
+- soft neutral background
+- floating mobile-card feeling
+- rounded UI
+- large object imagery
+- subtle shadows
+- clean typography
+- generous whitespace
+- minimal interface
+- modern bottom navigation
+
+while adapting the actual colors to the ClaimIt navy + emerald + amber design system.
+
+Generate all screens as ONE CONSISTENT MOBILE DESIGN SYSTEM so that switching between Student and Staff feels like the same application.
