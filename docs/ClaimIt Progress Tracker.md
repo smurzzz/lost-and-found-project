@@ -11,7 +11,7 @@
 | 2 | Backend and database foundation | Review | Schema, migration, auth, and typed tRPC API implemented on Neon PostgreSQL; workflow rules unit-tested (12/12). UI unchanged; screens connect in Phases 3–6. See Phase 2 evidence below. |
 | 3 | Staff logging and QR tags | Review | Shared validation contract, collision-safe QR payloads, PNG tag rendering + printing, audit FOUND persistence. Live E2E 12/12 incl. duplicate/missing/invalid cases. See Phase 3 evidence below. |
 | 4 | Student reports and structured matches | Review | Lost reports persisted; rule-based matching (category + description/name/location coverage + recency, no AI) in `shared/matching.ts`; Possible Matches UI live with scored, explainable matches and an empty state; MATCH_FOUND notifications; claim → MATCHED link. Unit tests 30/30; live E2E 12/12 incl. no-match gates. See Phase 4 evidence below. |
-| 5 | QR-verified release | Not started | Connect camera scanning and enforce release on the API. |
+| 5 | QR-verified release | Review | Camera scan → verify claimant → confirm release, all enforced server-side: strict QR payload validation, staff-only scan/release, 10-minute scan freshness, `releasedAt` + `lastScannedBy` timestamps, claimant identity in the append-only RELEASED audit event. Live E2E 15/15 incl. 6 rejected-release attempts. See Phase 5 evidence below. |
 | 6 | Push notifications | Not started | Connect probable-match notifications through Expo. |
 | 7 | Audit and reporting | Not started | Persist and query the audit timeline. |
 | 8 | Integration, APK, UAT, and defense | Not started | Run the demo and testing checklists, then build with EAS. |
@@ -108,6 +108,15 @@ One application shell (`app/(tabs)/index.tsx`) holds a `ScreenKey` union of 11 s
 - **UI (layouts unchanged)**: Report Lost Item is stateful with inline validation and a category sheet; Possible Matches renders real scored matches (`Possible Match · NN%` pill, reason line) with an empty state; Claim Verification pre-fills the distinctive-detail answer from the item description and links the claim to the originating report; the Home "My Lost Reports" card shows the latest report with its live match count.
 - **Tests**: unit 30/30 (matcher match/no-match matrix, validation contract, workflow rules); live E2E vs API + Neon 12/12 — match ranked (score 71) with reasons, pre-loss item excluded, wrong-category item excluded, matches sorted strongest-first, `matchCount=2` on `reports.mine`, MATCH_FOUND notifications persisted (2), short description and invalid category rejected, claim links report → status MATCHED. Test rows cleaned up.
 - **Gates**: `pnpm check` ✓ · `pnpm lint` 0 problems ✓ · `pnpm test -- --run` 30/30 ✓ · web export ✓.
+
+## Phase 5 evidence (2026-09-19)
+
+- **Server-enforced workflow (the phase's core requirement)**: `items.scan` and `items.release` are staff-only; `items.scan` input is validated against the canonical QR payload contract (`CLM-XXXX-XXXX-XXXXXXXXXXXXXXXX`) at the tRPC layer **and** re-checked in the service; release calls `canRelease` from the shared workflow module, so the client can never bypass the rule.
+- **Scan freshness**: `canRelease` now takes `minutesSinceScan` — scans older than `SCAN_FRESHNESS_MINUTES` (10) are rejected with "rescan" guidance, enforcing that the scan happens at handover. Terminal-state check runs first so re-releasing reports "Item is already released" rather than a misleading claim error.
+- **Claimant recording**: the pending-claim query joins `users` so the RELEASED audit detail reads "Item released to claimant <name> (claim verified by staff scan)"; `lastScannedBy` records *which* staff scanned; `releasedAt` is an explicit release timestamp (both columns pushed to Neon).
+- **UI (layout unchanged)**: the Scan screen now runs the real flow — tap-to-start `expo-camera` `CameraView` (QR-only) with the reticle overlay, a manual payload entry fallback (web / denied camera permission), inline scan errors, and the bottom sheet populated from the live scan result (item, claimant, verification answer). Confirm Release calls the API and surfaces server rejection reasons verbatim in an alert banner.
+- **Tests**: unit 36/36 (freshness rule: fresh/stale/no-scan/no-claim/released/back-compat); live E2E vs API + Neon **15/15** — rejected releases: no scan, malformed QR payload, student-caller scan, student-caller release, unknown-item payload, fresh scan without pending claim; happy path: claim → second staff member scans → release succeeds → `releasedAt` + `lastScannedBy` persisted → audit chain `FOUND → CLAIM_REQUESTED → RELEASED` with claimant identity and no duplicate FOUND/RELEASED events. Test rows cleaned up.
+- **Gates**: `pnpm check` ✓ · `pnpm lint` 0 problems ✓ · `pnpm test -- --run` 36/36 ✓ · web export ✓.
 
 ## Current UI acceptance checklist
 

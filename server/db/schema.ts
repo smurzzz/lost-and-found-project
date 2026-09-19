@@ -76,6 +76,10 @@ export const foundItems = pgTable(
       .references(() => users.id),
     /** Set when a staff scan verifies the tag at release time. */
     lastScannedAt: timestamp("last_scanned_at", { withTimezone: true }),
+    /** The staff user who performed the last verified scan (Phase 5). */
+    lastScannedBy: uuid("last_scanned_by").references(() => users.id),
+    /** When the item was actually released to the claimant (Phase 5). */
+    releasedAt: timestamp("released_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

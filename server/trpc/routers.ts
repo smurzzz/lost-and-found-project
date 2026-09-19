@@ -26,6 +26,7 @@ import {
   listReportsForStudent,
 } from "../services/lost-report-service";
 import {
+  isValidQrPayload,
   logFoundItemSchema,
   reportLostItemSchema,
 } from "../../shared/validation";
@@ -71,9 +72,18 @@ export const appRouter = baseRouter({
     tag: staffOnlyProcedure
       .input(z.object({ itemId: z.string().uuid() }))
       .query(({ input }) => buildTagData(input.itemId)),
-    /** Staff scan: resolves a QR payload to item + pending claim. */
+    /**
+     * Staff scan: resolves a QR payload to item + pending claim. Input is
+     * validated against the canonical payload contract (Phase 5).
+     */
     scan: staffOnlyProcedure
-      .input(z.object({ qrCode: z.string().min(4) }))
+      .input(
+        z.object({
+          qrCode: z
+            .string()
+            .refine(isValidQrPayload, "Invalid QR payload format"),
+        }),
+      )
       .mutation(({ ctx, input }) =>
         scanQrTag({
           qrCode: input.qrCode,

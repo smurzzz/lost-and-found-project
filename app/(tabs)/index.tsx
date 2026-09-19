@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { CameraView } from "expo-camera";
 import {
   FlatList,
   Image,
@@ -24,6 +25,7 @@ import {
   type FoundItem,
   type LostReport as LostReportFacade,
   type ReportMatchFacade,
+  type ScanResult as ScanResultFacade,
   type TagData,
 } from "@/lib/claimit-service";
 import { renderTagHtml } from "@/lib/tag-html";
@@ -1497,7 +1499,58 @@ function QrTag({ go }: { go: (screen: ScreenKey) => void }) {
 /* -------------------------------- scan release ------------------------------- */
 
 function ScanRelease({ go }: { go: (screen: ScreenKey) => void }) {
+  // Phase 5: real camera scanning (native) with a manual payload fallback
+  // (web / denied permission), driving the live scan -> release API flow.
   const [released, setReleased] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualPayload, setManualPayload] = useState("");
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanResult, setScanResult] = useState<ScanResultFacade | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const handleScanned = async (payload: string) => {
+    if (busy || released) return;
+    setBusy(true);
+    setScanError(null);
+    try {
+      const result = await ClaimItService.scanQrTag(payload.trim());
+      setScanResult(result);
+      setScanning(false);
+      setManualOpen(false);
+    } catch (error) {
+      setScanError(error instanceof Error ? error.message : "Scan failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirm = async () => {
+    if (!scanResult) return;
+    setBusy(true);
+    try {
+      const item = await ClaimItService.confirmRelease(scanResult.item.id);
+      if (item.status === "RELEASED") {
+        setReleased(true);
+        showAlert(
+          "Item Released",
+          `${item.name} released to the claimant. Audit event recorded.`,
+        );
+      }
+    } catch (error) {
+      showAlert(
+        "Release rejected",
+        error instanceof Error ? error.message : "Try again.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const item = scanResult?.item;
+  const claimant = scanResult?.pendingClaim?.claimantName;
+  const answer = scanResult?.pendingClaim?.verificationAnswer;
+
   return (
     <ScreenContainer
       edges={["top", "bottom", "left", "right"]}
@@ -1537,54 +1590,129 @@ function ScanRelease({ go }: { go: (screen: ScreenKey) => void }) {
           </View>
         </View>
         <View className="z-10 flex-1 items-center justify-center">
-          <View className="h-64 w-64 items-center justify-center rounded-3xl border border-white/20 bg-black/10">
-            <ReticleCorner position="tl" />
-            <ReticleCorner position="tr" />
-            <ReticleCorner position="bl" />
-            <ReticleCorner position="br" />
-          </View>
-          <Text className="mt-6 text-center text-[15px] font-medium text-white">
-            Scan the item&apos;s QR tag to release
-          </Text>
+          {scanning ? (
+            <View className="h-64 w-64 items-center justify-center rounded-3xl bg-black">
+              <CameraView
+                style={{ width: 256, height: 256 }}
+                barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                onBarcodeScanned={({ data }) => void handleScanned(data)}
+              />
+              <View className="pointer-events-none absolute inset-0 items-center justify-center rounded-3xl">
+                <ReticleCorner position="tl" />
+                <ReticleCorner position="tr" />
+                <ReticleCorner position="bl" />
+                <ReticleCorner position="br" />
+              </View>
+            </View>
+          ) : (
+            <Pressable
+              onPress={() => {
+                setScanError(null);
+                setScanning(true);
+              }}
+              className="h-64 w-64 items-center justify-center rounded-3xl border border-white/20 bg-black/10"
+            >
+              <ReticleCorner position="tl" />
+              <ReticleCorner position="tr" />
+              <ReticleCorner position="bl" />
+              <ReticleCorner position="br" />
+              <View className="absolute h-16 w-16 items-center justify-center rounded-2xl bg-white/10">
+                <LineIcon name="scan" size={30} color="#FFFFFF" strokeWidth={1.8} />
+              </View>
+            </Pressable>
+          )}
+          {scanError ? (
+            <Text className="mt-4 max-w-[300px] text-center text-[13px] font-semibold text-red-300">
+              {scanError}
+            </Text>
+          ) : (
+            <Text className="mt-6 text-center text-[15px] font-medium text-white">
+              {scanning
+                ? "Point the camera at the item's QR tag"
+                : "Tap the viewfinder to start scanning"}
+            </Text>
+          )}
+          {!scanning && (
+            <Pressable
+              onPress={() => setManualOpen((v) => !v)}
+              className="mt-3 rounded-full border border-white/25 bg-white/10 px-4 py-2"
+            >
+              <Text className="text-xs font-semibold text-white">
+                {manualOpen ? "Hide manual entry" : "Enter payload manually"}
+              </Text>
+            </Pressable>
+          )}
+          {manualOpen && !scanning && (
+            <View className="mt-3 w-[86%] gap-2">
+              <TextInput
+                value={manualPayload}
+                onChangeText={setManualPayload}
+                placeholder="CLM-XXXX-XXXX-XXXXXXXXXXXXXXXX"
+                placeholderTextColor="#64748B"
+                autoCapitalize="characters"
+                autoCorrect={false}
+                className="rounded-xl border border-white/25 bg-white/95 px-3.5 py-3 text-[14px] tracking-wide text-slate-800"
+              />
+              <Pressable
+                disabled={busy || manualPayload.trim().length < 8}
+                onPress={() => void handleScanned(manualPayload)}
+                className="items-center rounded-xl bg-emerald-500 py-3"
+              >
+                <Text className="text-sm font-bold text-white">
+                  {busy ? "Checking..." : "Look up item"}
+                </Text>
+              </Pressable>
+            </View>
+          )}
         </View>
         <View className="z-30 flex-col rounded-t-[32px] bg-white px-5 pb-3 pt-3">
           <View className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-slate-300" />
-          <View className="mb-5 flex-row items-start justify-between">
-            <View className="flex-row items-start gap-3.5">
-              <Image
-                source={{ uri: IMAGES.backpack }}
-                className="h-20 w-20 flex-shrink-0 rounded-2xl border border-slate-100 bg-slate-100"
-              />
-              <View className="pt-0.5">
-                <Text className="text-xl font-bold tracking-tight text-slate-900">
-                  Navy Backpack
-                </Text>
-                <View className="mt-2 flex-row items-start gap-2">
-                  <LineIcon name="user" size={14} color="#94A3B8" />
-                  <View className="leading-tight">
-                    <Text className="block text-xs font-normal text-slate-400">Claimant</Text>
-                    <Text className="text-sm font-bold text-slate-800">Alex Morgan</Text>
+          {item ? (
+            <View className="mb-5 flex-row items-start justify-between">
+              <View className="flex-row items-start gap-3.5">
+                <Image
+                  source={item.imageUrl ? { uri: item.imageUrl } : { uri: IMAGES.backpack }}
+                  className="h-20 w-20 flex-shrink-0 rounded-2xl border border-slate-100 bg-slate-100"
+                />
+                <View className="pt-0.5">
+                  <Text className="text-xl font-bold tracking-tight text-slate-900">
+                    {item.name}
+                  </Text>
+                  <View className="mt-2 flex-row items-start gap-2">
+                    <LineIcon name="user" size={14} color="#94A3B8" />
+                    <View className="leading-tight">
+                      <Text className="block text-xs font-normal text-slate-400">Claimant</Text>
+                      <Text className="text-sm font-bold text-slate-800">
+                        {claimant ?? "—"}
+                      </Text>
+                    </View>
                   </View>
-                </View>
-                <View className="mt-2 flex-row items-start gap-2">
-                  <LineIcon name="shield" size={14} color="#94A3B8" />
-                  <View className="flex-1 leading-tight">
-                    <Text className="block text-xs font-normal text-slate-400">
-                      Verification Answer
-                    </Text>
-                    <Text className="text-[13px] font-bold text-slate-800" numberOfLines={2}>
-                      Small astronomy patch on the front pocket
-                    </Text>
+                  <View className="mt-2 flex-row items-start gap-2">
+                    <LineIcon name="shield" size={14} color="#94A3B8" />
+                    <View className="flex-1 leading-tight">
+                      <Text className="block text-xs font-normal text-slate-400">
+                        Verification Answer
+                      </Text>
+                      <Text className="text-[13px] font-bold text-slate-800" numberOfLines={2}>
+                        {answer ?? "No pending claim for this item"}
+                      </Text>
+                    </View>
                   </View>
                 </View>
               </View>
+              <Pill
+                label={released ? "Released" : item.status === "CLAIM_REQUESTED" ? "Pending claim" : item.status}
+                tone={released ? "emerald" : item.status === "CLAIM_REQUESTED" ? "amber" : "gray"}
+                icon={released ? "check" : "clock"}
+              />
             </View>
-            <Pill
-              label={released ? "Released" : "Pending claim"}
-              tone={released ? "emerald" : "amber"}
-              icon={released ? "check" : "clock"}
-            />
-          </View>
+          ) : (
+            <View className="mb-5 items-center py-2">
+              <Text className="text-sm font-semibold text-slate-500">
+                Scan a QR tag to load the item and claimant
+              </Text>
+            </View>
+          )}
           <View className="mb-2 gap-2.5 pt-1">
             {released ? (
               <View className="min-h-[52px] flex-row items-center justify-center gap-2 rounded-full bg-emerald-50">
@@ -1595,11 +1723,14 @@ function ScanRelease({ go }: { go: (screen: ScreenKey) => void }) {
               </View>
             ) : (
               <Pressable
-                onPress={() => setReleased(true)}
+                disabled={!scanResult || busy}
+                onPress={confirm}
                 className="min-h-[52px] flex-row items-center justify-center gap-2 rounded-full bg-[#10B981] px-4 py-3.5 shadow-sm"
               >
                 <LineIcon name="check" size={20} color="#FFFFFF" strokeWidth={2.5} />
-                <Text className="text-[15px] font-semibold text-white">Confirm Release</Text>
+                <Text className="text-[15px] font-semibold text-white">
+                  {busy ? "Working..." : "Confirm Release"}
+                </Text>
               </Pressable>
             )}
             <Pressable

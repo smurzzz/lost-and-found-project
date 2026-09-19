@@ -8,6 +8,7 @@
 import { and, desc, eq } from "drizzle-orm";
 
 import { canRelease } from "../../shared/workflow";
+import { isValidQrPayload } from "../../shared/validation";
 import { getDb } from "../db/client";
 import { claims, foundItems, users } from "../db/schema";
 import {
@@ -117,6 +118,13 @@ export async function scanQrTag(input: {
   staffName: string;
 }): Promise<ScanResult> {
   const db = getDb();
+
+  // API-layer QR validation (Phase 5): reject anything that is not the
+  // canonical opaque payload format before touching the database.
+  if (!isValidQrPayload(input.qrCode)) {
+    throw new Error("Invalid QR payload format");
+  }
+
   const rows = await db
     .select()
     .from(foundItems)
@@ -125,9 +133,15 @@ export async function scanQrTag(input: {
   const item = rows[0];
   if (!item) throw new Error("Unknown QR code");
 
+  // Record WHO scanned as well as WHEN — the scan identity backs the
+  // release audit trail and the fresh-scan release rule.
   await db
     .update(foundItems)
-    .set({ lastScannedAt: new Date(), updatedAt: new Date() })
+    .set({
+      lastScannedAt: new Date(),
+      lastScannedBy: input.staffId,
+      updatedAt: new Date(),
+    })
     .where(eq(foundItems.id, item.id));
 
   const pending = await db
@@ -157,11 +171,13 @@ export async function confirmRelease(input: {
   if (!item) throw new Error("Item not found");
 
   const pending = await db
-    .select()
+    .select({ claim: claims, claimantName: users.name })
     .from(claims)
+    .innerJoin(users, eq(users.id, claims.studentId))
     .where(and(eq(claims.foundItemId, input.itemId), eq(claims.status, "PENDING")))
     .limit(1);
-  const pendingClaim = pending[0] ?? null;
+  const pendingClaim = pending[0]?.claim ?? null;
+  const claimantName = pending[0]?.claimantName ?? null;
 
   const itemRow = await db
     .select()
@@ -170,22 +186,37 @@ export async function confirmRelease(input: {
     .limit(1);
   const scanVerified = Boolean(itemRow[0]?.lastScannedAt);
 
+  // Freshness: the scan must be recent (at handover, not hours ago).
+  const minutesSinceScan = itemRow[0]?.lastScannedAt
+    ? (Date.now() - itemRow[0].lastScannedAt.getTime()) / 60_000
+    : undefined;
+
   const decision = canRelease({
     status: item.status,
     staffScanVerified: scanVerified,
     hasPendingClaim: Boolean(pendingClaim),
+    minutesSinceScan,
   });
   if (!decision.allowed) throw new Error(decision.reason ?? "Release not allowed");
+
+  // Claimant identity is recorded in the append-only audit event (Phase 5).
+  const claimantDetail = pendingClaim
+    ? `Item released to claimant ${claimantName} (claim verified by staff scan)`
+    : "Item released after staff scan";
 
   const updated = await transitionItemStatus({
     itemId: input.itemId,
     to: "RELEASED",
     actorId: input.staffId,
     actorName: input.staffName,
-    detail: pendingClaim
-      ? `Item released to claimant (claim verified by staff scan)`
-      : "Item released after staff scan",
+    detail: claimantDetail,
   });
+
+  // Explicit release timestamp (Phase 5).
+  await db
+    .update(foundItems)
+    .set({ releasedAt: new Date(), updatedAt: new Date() })
+    .where(eq(foundItems.id, input.itemId));
 
   if (pendingClaim) {
     await db
