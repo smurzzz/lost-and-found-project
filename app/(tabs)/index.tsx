@@ -24,6 +24,7 @@ import {
   ClaimItService,
   type FoundItem,
   type LostReport as LostReportFacade,
+  type NotificationFacade,
   type ReportMatchFacade,
   type ScanResult as ScanResultFacade,
   type TagData,
@@ -782,12 +783,20 @@ function ReportLost({ go }: { go: (screen: ScreenKey) => void }) {
 function Matches({ go }: { go: (screen: ScreenKey) => void }) {
   // Phase 4: real structured matches for the active report (category +
   // description scoring from the server). Mock fallback in prototype mode.
+  // Phase 6: doubles as the notifications state — deep-linked from pushes.
   const [matches, setMatches] = useState<ReportMatchFacade[] | null>(null);
   const [report, setReport] = useState<LostReportFacade | null>(null);
+  const [notifications, setNotifications] = useState<NotificationFacade[] | null>(
+    null,
+  );
 
   useEffect(() => {
     let alive = true;
     const load = async () => {
+      // Notifications feed (Phase 6): recent MATCH_FOUND / CLAIM_DECISION.
+      ClaimItService.listNotifications().then((rows) => {
+        if (alive) setNotifications(rows);
+      });
       const reports = await ClaimItService.listMyReports();
       if (!alive) return;
       const current =
@@ -837,6 +846,58 @@ function Matches({ go }: { go: (screen: ScreenKey) => void }) {
               </Text>
             )}
           </View>
+        }
+        ListFooterComponent={
+          notifications && notifications.length > 0 ? (
+            <View className="mx-5 mb-4 rounded-3xl border border-slate-100 bg-white p-4">
+              <View className="mb-3 flex-row items-center justify-between">
+                <Text className="text-base font-bold tracking-tight text-[#0B2545]">
+                  Recent Activity
+                </Text>
+                <Pill
+                  label={`${notifications.filter((n) => !n.read).length} new`}
+                  tone="blue"
+                />
+              </View>
+              {notifications.slice(0, 5).map((n) => (
+                <Pressable
+                  key={n.id}
+                  onPress={() => {
+                    void ClaimItService.markNotificationRead(n.id);
+                    setNotifications((prev) =>
+                      prev
+                        ? prev.map((row) =>
+                            row.id === n.id ? { ...row, read: true } : row,
+                          )
+                        : prev,
+                    );
+                  }}
+                  className="flex-1 flex-row items-start gap-3 border-b border-slate-50 py-2.5 last:border-b-0"
+                >
+                  <View
+                    className={`mt-0.5 h-2 w-2 flex-shrink-0 rounded-full ${
+                      n.read ? "bg-slate-200" : "bg-amber-500"
+                    }`}
+                  />
+                  <View className="flex-1">
+                    <Text
+                      className={`text-[13px] ${
+                        n.read ? "font-medium text-slate-500" : "font-bold text-[#0B2545]"
+                      }`}
+                    >
+                      {n.title}
+                    </Text>
+                    <Text className="mt-0.5 text-xs leading-snug text-slate-500" numberOfLines={2}>
+                      {n.body}
+                    </Text>
+                  </View>
+                  <Text className="mt-0.5 flex-shrink-0 text-[10px] text-slate-400">
+                    {formatDate(n.createdAt)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null
         }
         ListEmptyComponent={
           loading ? null : (

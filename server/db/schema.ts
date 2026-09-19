@@ -169,6 +169,29 @@ export const notifications = pgTable(
   (table) => [index("notifications_user_idx").on(table.userId, table.createdAt)],
 );
 
+/**
+ * Expo push tokens (Phase 6). One row per device; upserted on registration.
+ * Tokens are opaque Expo identifiers — no SMS channels are supported by
+ * design (proposal exclusion).
+ */
+export const pushTokens = pgTable(
+  "push_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** ExponentPushToken[...] string from expo-notifications. */
+    expoPushToken: text("expo_push_token").notNull().unique(),
+    deviceName: text("device_name"),
+    platform: text("platform"),
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("push_tokens_user_idx").on(table.userId)],
+);
+
 /* ------------------------------- relations ------------------------------- */
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -222,6 +245,7 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
 /* --------------------------------- types --------------------------------- */
 
 export type User = typeof users.$inferSelect;
+export type PushToken = typeof pushTokens.$inferSelect;
 export type FoundItem = typeof foundItems.$inferSelect;
 export type LostReport = typeof lostReports.$inferSelect;
 export type Claim = typeof claims.$inferSelect;

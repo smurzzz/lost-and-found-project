@@ -12,7 +12,7 @@
 | 3 | Staff logging and QR tags | Review | Shared validation contract, collision-safe QR payloads, PNG tag rendering + printing, audit FOUND persistence. Live E2E 12/12 incl. duplicate/missing/invalid cases. See Phase 3 evidence below. |
 | 4 | Student reports and structured matches | Review | Lost reports persisted; rule-based matching (category + description/name/location coverage + recency, no AI) in `shared/matching.ts`; Possible Matches UI live with scored, explainable matches and an empty state; MATCH_FOUND notifications; claim → MATCHED link. Unit tests 30/30; live E2E 12/12 incl. no-match gates. See Phase 4 evidence below. |
 | 5 | QR-verified release | Review | Camera scan → verify claimant → confirm release, all enforced server-side: strict QR payload validation, staff-only scan/release, 10-minute scan freshness, `releasedAt` + `lastScannedBy` timestamps, claimant identity in the append-only RELEASED audit event. Live E2E 15/15 incl. 6 rejected-release attempts. See Phase 5 evidence below. |
-| 6 | Push notifications | Not started | Connect probable-match notifications through Expo. |
+| 6 | Push notifications | Review | Expo push for MATCH_FOUND/CLAIM_DECISION: `push_tokens` registry, responsible permission flow (granted/denied/unavailable state machine), best-effort dispatcher with dead-token disabling, tap-to-deep-link into Possible Matches, no SMS by design. Live E2E 9/9 incl. live dead-token path. See Phase 6 evidence below. |
 | 7 | Audit and reporting | Not started | Persist and query the audit timeline. |
 | 8 | Integration, APK, UAT, and defense | Not started | Run the demo and testing checklists, then build with EAS. |
 
@@ -117,6 +117,15 @@ One application shell (`app/(tabs)/index.tsx`) holds a `ScreenKey` union of 11 s
 - **UI (layout unchanged)**: the Scan screen now runs the real flow — tap-to-start `expo-camera` `CameraView` (QR-only) with the reticle overlay, a manual payload entry fallback (web / denied camera permission), inline scan errors, and the bottom sheet populated from the live scan result (item, claimant, verification answer). Confirm Release calls the API and surfaces server rejection reasons verbatim in an alert banner.
 - **Tests**: unit 36/36 (freshness rule: fresh/stale/no-scan/no-claim/released/back-compat); live E2E vs API + Neon **15/15** — rejected releases: no scan, malformed QR payload, student-caller scan, student-caller release, unknown-item payload, fresh scan without pending claim; happy path: claim → second staff member scans → release succeeds → `releasedAt` + `lastScannedBy` persisted → audit chain `FOUND → CLAIM_REQUESTED → RELEASED` with claimant identity and no duplicate FOUND/RELEASED events. Test rows cleaned up.
 - **Gates**: `pnpm check` ✓ · `pnpm lint` 0 problems ✓ · `pnpm test -- --run` 36/36 ✓ · web export ✓.
+
+## Phase 6 evidence (2026-09-19)
+
+- **Token registry**: `push_tokens` table (unique Expo token per device, platform/device metadata, `enabled` flag) pushed to Neon; `notifications.registerPushToken` validates the `ExponentPushToken[...]` format server-side and upserts (re-registration updates, never duplicates); `notifications.disablePushToken` implements opt-out.
+- **Dispatcher** (`server/services/push-service.ts`): best-effort delivery through `expo-server-sdk` fired whenever a MATCH_FOUND or CLAIM_DECISION notification row is created — a push outage can never fail the triggering mutation. Chunks batches per Expo rate limits; `DeviceNotRegistered` receipts disable the dead token. **No SMS channels exist anywhere** (proposal exclusion), verified by schema inspection in E2E.
+- **Responsible permission flow** (`lib/push-service.ts`): the OS prompt happens once, only after sign-in (never at cold start), behind a pure state machine — `granted` / `denied` / `unavailable` (web, emulator, token fetch failure) — unit-tested directly. Android channel `claimit-default` created before delivery.
+- **Notification state + deep link**: the Possible Matches screen now carries a "Recent Activity" strip (unread dot, mark-read on tap, live counts) fed by the same notifications API; tapping a MATCH_FOUND push routes the app shell to Matches through `lib/push-events.ts`; the push payload carries `{kind, foundItemId, deepLink}`.
+- **Tests**: unit 41/41 (permission classification, tap payload extraction, all prior suites); live E2E vs API + Neon **9/9** — valid token registered, malformed token rejected at the boundary, re-registration does not duplicate, MATCH_FOUND + CLAIM_DECISION fan-out persisted, no-SMS schema check, opt-out disables; the **dead-token path was exercised live** (Expo reported the fake device unregistered → token auto-disabled). Test rows cleaned up.
+- **Gates**: `pnpm check` ✓ · `pnpm lint` 0 problems ✓ · `pnpm test -- --run` 41/41 ✓ · web export ✓.
 
 ## Current UI acceptance checklist
 

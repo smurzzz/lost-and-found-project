@@ -9,6 +9,7 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import type { NotificationKind } from "../../shared/workflow";
 import { getDb } from "../db/client";
 import { notifications } from "../db/schema";
+import { sendPushForNotification } from "./push-service";
 
 export type NotificationDto = {
   id: string;
@@ -52,7 +53,19 @@ export async function createNotification(input: {
       foundItemId: input.foundItemId ?? null,
     })
     .returning();
-  return toNotificationDto(inserted[0]);
+  const dto = toNotificationDto(inserted[0]);
+
+  // Phase 6: best-effort Expo push alongside the persisted row. A push
+  // outage must never fail the mutation that created the notification.
+  void sendPushForNotification({
+    userId: input.userId,
+    kind: input.kind,
+    title: input.title,
+    body: input.body,
+    foundItemId: input.foundItemId ?? null,
+  }).catch(() => undefined);
+
+  return dto;
 }
 
 export async function listNotifications(userId: string): Promise<NotificationDto[]> {

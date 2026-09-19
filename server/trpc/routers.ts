@@ -36,6 +36,11 @@ import {
   markNotificationRead,
   unreadCount,
 } from "../services/notification-service";
+import {
+  disablePushToken,
+  registerPushToken,
+  isValidExpoPushToken,
+} from "../services/push-token-service";
 import { upsertDevUser } from "../auth";
 
 export const appRouter = baseRouter({
@@ -161,6 +166,31 @@ export const appRouter = baseRouter({
     markRead: publicProcedure
       .input(z.object({ id: z.string().uuid() }))
       .mutation(({ ctx, input }) => markNotificationRead(ctx.user.id, input.id)),
+    /** Register this device's Expo push token (Phase 6). */
+    registerPushToken: publicProcedure
+      .input(
+        z.object({
+          expoPushToken: z
+            .string()
+            .refine(isValidExpoPushToken, "Invalid Expo push token format"),
+          deviceName: z.string().max(120).nullish(),
+          platform: z.string().max(40).nullish(),
+        }),
+      )
+      .mutation(({ ctx, input }) =>
+        registerPushToken({
+          userId: ctx.user.id,
+          expoPushToken: input.expoPushToken,
+          deviceName: input.deviceName ?? null,
+          platform: input.platform ?? null,
+        }),
+      ),
+    /** Disable a token (e.g. user turned notifications off). */
+    disablePushToken: publicProcedure
+      .input(z.object({ expoPushToken: z.string().min(8) }))
+      .mutation(({ ctx, input }) =>
+        disablePushToken({ userId: ctx.user.id, expoPushToken: input.expoPushToken }),
+      ),
   },
 });
 

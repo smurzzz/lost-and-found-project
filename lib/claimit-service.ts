@@ -56,6 +56,17 @@ export type ReportMatchFacade = {
   reasons: string[];
 };
 
+/** An in-app notification as the UI sees it (Phase 6). */
+export type NotificationFacade = {
+  id: string;
+  kind: "MATCH_FOUND" | "CLAIM_DECISION" | "SYSTEM";
+  title: string;
+  body: string;
+  foundItemId: string | null;
+  read: boolean;
+  createdAt: string;
+};
+
 export type ScanResult = {
   item: FoundItem;
   pendingClaim: {
@@ -310,6 +321,33 @@ export const ClaimItService = {
           ...r,
           matchCount: r.status === "OPEN" ? 2 : 0,
         })),
+    );
+  },
+
+  /** Recent in-app notifications for the signed-in user (Phase 6). */
+  listNotifications(): Promise<NotificationFacade[]> {
+    return withClient(
+      async (c) =>
+        (await c.notifications.list.query()).map((n) => ({
+          id: n.id,
+          kind: n.kind,
+          title: n.title,
+          body: n.body,
+          foundItemId: n.foundItemId,
+          read: n.readAt !== null,
+          createdAt: n.createdAt.toISOString(),
+        })),
+      () => [],
+    );
+  },
+
+  /** Mark one notification read (Phase 6). */
+  markNotificationRead(id: string): Promise<void> {
+    return withClient(
+      async (c) => {
+        await c.notifications.markRead.mutate({ id });
+      },
+      () => undefined,
     );
   },
 
