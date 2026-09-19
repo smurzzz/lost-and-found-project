@@ -25,16 +25,17 @@ import {
   findMatchesForReport,
   listReportsForStudent,
 } from "../services/lost-report-service";
+import {
+  logFoundItemSchema,
+  reportLostItemSchema,
+} from "../../shared/validation";
 import { buildTagData } from "../services/tag-service";
-import { logFoundItemSchema } from "../../shared/validation";
 import {
   listNotifications,
   markNotificationRead,
   unreadCount,
 } from "../services/notification-service";
 import { upsertDevUser } from "../auth";
-
-const dateString = z.union([z.string(), z.date()]).transform((v) => new Date(v));
 
 export const appRouter = baseRouter({
   /** Exchange a dev identity for a session identity (dev mode only). */
@@ -93,16 +94,9 @@ export const appRouter = baseRouter({
   },
 
   reports: {
+    /** Validated by the shared Phase 4 form contract. */
     create: publicProcedure
-      .input(
-        z.object({
-          category: z.string().min(1).max(60),
-          description: z.string().min(1).max(2000),
-          dateLost: dateString,
-          locationLost: z.string().min(1).max(160),
-          imageUrl: z.string().url().nullish(),
-        }),
-      )
+      .input(reportLostItemSchema)
       .mutation(({ ctx, input }) =>
         createLostReport({
           studentId: ctx.user.id,
@@ -111,6 +105,7 @@ export const appRouter = baseRouter({
         }),
       ),
     mine: publicProcedure.query(({ ctx }) => listReportsForStudent(ctx.user.id)),
+    /** Structured matches for one of the caller's own reports. */
     matches: publicProcedure
       .input(z.object({ reportId: z.string().uuid() }))
       .query(async ({ ctx, input }) => {

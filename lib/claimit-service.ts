@@ -19,6 +19,8 @@ export type FoundItem = {
   qrCode: string;
   name: string;
   category: string;
+  /** Free-form detail used for structured matching (Phase 4). */
+  description: string | null;
   location: string;
   foundDate: string;
   status: "FOUND" | "MATCHED" | "CLAIM_REQUESTED" | "RELEASED";
@@ -47,6 +49,13 @@ export type AuditEvent = {
   createdAt: string;
 };
 
+/** A scored match as the UI sees it (Phase 4). */
+export type ReportMatchFacade = {
+  item: FoundItem;
+  score: number;
+  reasons: string[];
+};
+
 export type ScanResult = {
   item: FoundItem;
   pendingClaim: {
@@ -67,12 +76,14 @@ function toFacadeItem(dto: {
   status: FoundItem["status"];
   imageUrl: string | null;
   qrTagReady: boolean;
+  description?: string | null;
   pendingClaimId?: string | null;
   claimantName?: string | null;
   verificationAnswer?: string | null;
 }): FoundItem {
   return {
     ...dto,
+    description: dto.description ?? null,
     foundDate:
       dto.foundDate instanceof Date
         ? dto.foundDate.toISOString()
@@ -116,6 +127,37 @@ const MOCK_ITEMS: FoundItem[] = [
     qrCode: "CLM-MOCK-0001",
     name: "Navy Backpack",
     category: "Bags",
+    description: "Black with an astronomy patch on the front pocket",
+    location: "Library · 2nd floor",
+    foundDate: "2025-04-26T10:14:00Z",
+    status: "FOUND",
+    imageUrl:
+      "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=800&q=85",
+    qrTagReady: true,
+  },
+];
+
+/** Mock reports for prototype mode (API unreachable). */
+const MOCK_REPORTS: LostReport[] = [
+  {
+    id: "report-1",
+    category: "Bags",
+    description:
+      "Black backpack with an astronomy patch on the front pocket and a broken left strap adjuster.",
+    dateLost: "2025-04-24T09:00:00.000Z",
+    locationLost: "Library, Building A",
+    status: "OPEN",
+  },
+];
+
+/** Mock matches for prototype mode (API unreachable). */
+const MOCK_MATCHES: FoundItem[] = [
+  {
+    id: "1",
+    qrCode: "CLM-MOCK-0001",
+    name: "Navy Backpack",
+    category: "Bags",
+    description: "Black with an astronomy patch on the front pocket",
     location: "Library · 2nd floor",
     foundDate: "2025-04-26T10:14:00Z",
     status: "FOUND",
@@ -237,7 +279,7 @@ export const ClaimItService = {
   },
 
   createLostReport(input: {
-    category: string;
+    category: FacadeCategory;
     description: string;
     dateLost: string;
     locationLost: string;
@@ -255,11 +297,40 @@ export const ClaimItService = {
     );
   },
 
-  findMatches(reportId: string): Promise<FoundItem[]> {
+  /** The signed-in student's reports with live match counts (Phase 4). */
+  listMyReports(): Promise<(LostReport & { matchCount: number })[]> {
     return withClient(
       async (c) =>
-        (await c.reports.matches.query({ reportId })).map(toFacadeItem),
-      () => MOCK_ITEMS,
+        (await c.reports.mine.query()).map((r) => ({
+          ...r,
+          dateLost: r.dateLost.toISOString(),
+        })) as (LostReport & { matchCount: number })[],
+      () =>
+        MOCK_REPORTS.map((r) => ({
+          ...r,
+          matchCount: r.status === "OPEN" ? 2 : 0,
+        })),
+    );
+  },
+
+  /**
+   * Structured matches (category + description only) for one of the
+   * student's reports, strongest first, with explainable reasons.
+   */
+  findMatches(reportId: string): Promise<ReportMatchFacade[]> {
+    return withClient(
+      async (c) =>
+        (await c.reports.matches.query({ reportId })).map((m) => ({
+          item: toFacadeItem(m.item),
+          score: m.score,
+          reasons: m.reasons,
+        })),
+      () =>
+        MOCK_MATCHES.map((m) => ({
+          item: m,
+          score: 80,
+          reasons: ["Same category", "Description overlaps item details"],
+        })),
     );
   },
 

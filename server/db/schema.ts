@@ -63,6 +63,8 @@ export const foundItems = pgTable(
     qrCode: text("qr_code").notNull().unique(),
     name: text("name").notNull(),
     category: text("category").notNull(),
+    /** Free-form detail used for structured matching (Phase 4). */
+    description: text("description"),
     location: text("location").notNull(),
     foundDate: timestamp("found_date", { withTimezone: true }).notNull().defaultNow(),
     status: itemStatusEnum("status").notNull().default("FOUND"),

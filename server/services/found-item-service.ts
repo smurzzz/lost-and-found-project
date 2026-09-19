@@ -19,6 +19,7 @@ export type FoundItemDto = {
   qrCode: string;
   name: string;
   category: string;
+  description: string | null;
   location: string;
   foundDate: Date;
   status: ItemStatus;
@@ -32,6 +33,7 @@ export function toItemDto(row: typeof foundItems.$inferSelect): FoundItemDto {
     qrCode: row.qrCode,
     name: row.name,
     category: row.category,
+    description: row.description,
     location: row.location,
     foundDate: row.foundDate,
     status: row.status,
@@ -57,12 +59,12 @@ export async function logFoundItem(
   // Defense in depth: tRPC already parsed this; re-validate for direct calls.
   const input = logFoundItemSchema.parse(rawInput);
   const db = getDb();
-  const qrCode = await generateUniqueQrPayload();
-  const inserted = await db
+  const qrCode = await generateUniqueQrPayload();    const inserted = await db
     .insert(foundItems)
     .values({
       name: input.name,
       category: input.category,
+      description: input.description ?? null,
       location: input.location,
       foundDate: new Date(input.foundDate),
       imageUrl: input.imageUrl ?? null,

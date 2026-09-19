@@ -1,17 +1,21 @@
 /**
- * Lost report service (Phase 2).
+ * Lost report service (Phases 2/4).
  *
  * Students file structured reports (category + description + location).
  * Matching is intentionally rule-based (no AI, per proposal exclusions):
- * same category plus word overlap between report text and item name,
- * and items that entered the system after the report was filed.
+ * the shared engine in shared/matching.ts scores candidates on category
+ * equality, word overlap across description/name/location, and recency.
+ * New matches fire MATCH_FOUND notifications for the report's student.
  */
 import { and, desc, eq, gte } from "drizzle-orm";
 
+import { rankMatches } from "../../shared/matching";
+import { reportLostItemSchema, type ReportLostItemInput } from "../../shared/validation";
 import { getDb } from "../db/client";
 import { foundItems, lostReports } from "../db/schema";
 import { toItemDto, type FoundItemDto } from "./found-item-service";
 import { recordAuditEvent } from "./audit-service";
+import { createNotification } from "./notification-service";
 
 export type LostReportDto = {
   id: string;
@@ -22,6 +26,18 @@ export type LostReportDto = {
   locationLost: string;
   imageUrl: string | null;
   status: (typeof lostReports.$inferSelect)["status"];
+};
+
+/** A report plus the number of current structured matches. */
+export type LostReportWithMatchCount = LostReportDto & {
+  matchCount: number;
+};
+
+/** A scored match enriched for the UI (match reasons + display fields). */
+export type ReportMatch = {
+  item: FoundItemDto;
+  score: number;
+  reasons: string[];
 };
 
 export function toReportDto(row: typeof lostReports.$inferSelect): LostReportDto {
@@ -37,54 +53,97 @@ export function toReportDto(row: typeof lostReports.$inferSelect): LostReportDto
   };
 }
 
-export async function createLostReport(input: {
-  studentId: string;
-  category: string;
-  description: string;
-  dateLost: Date;
-  locationLost: string;
-  imageUrl?: string | null;
-}): Promise<LostReportDto> {
+/**
+ * Create a lost report. Input is validated by the shared Phase 4 contract
+ * (defense in depth: tRPC already parsed it).
+ */
+export async function createLostReport(
+  input: ReportLostItemInput & { studentId: string },
+): Promise<LostReportDto> {
+  const parsed = reportLostItemSchema.parse(input);
   const db = getDb();
   const inserted = await db
     .insert(lostReports)
     .values({
       studentId: input.studentId,
-      category: input.category,
-      description: input.description,
-      dateLost: input.dateLost,
-      locationLost: input.locationLost,
-      imageUrl: input.imageUrl ?? null,
+      category: parsed.category,
+      description: parsed.description,
+      dateLost: new Date(parsed.dateLost),
+      locationLost: parsed.locationLost,
+      imageUrl: parsed.imageUrl ?? null,
     })
     .returning();
-  return toReportDto(inserted[0]);
+  const report = toReportDto(inserted[0]);
+
+  // Fire MATCH_FOUND notifications for any existing items that already
+  // match this new report (Phase 6 adds push delivery).
+  const matches = await findMatchesForReport(report);
+  for (const match of matches) {
+    await createNotification({
+      userId: input.studentId,
+      kind: "MATCH_FOUND",
+      title: "Possible match found",
+      body: `A ${match.item.name} found at ${match.item.location} may match your lost ${report.category.toLowerCase()} report.`,
+      foundItemId: match.item.id,
+    });
+  }
+
+  return report;
 }
 
-export async function listReportsForStudent(studentId: string): Promise<LostReportDto[]> {
+export async function listReportsForStudent(
+  studentId: string,
+): Promise<LostReportWithMatchCount[]> {
   const db = getDb();
   const rows = await db
     .select()
     .from(lostReports)
     .where(eq(lostReports.studentId, studentId))
     .orderBy(desc(lostReports.createdAt));
-  return rows.map(toReportDto);
+
+  return Promise.all(
+    rows.map(async (row) => {
+      const report = toReportDto(row);
+      return { ...report, matchCount: await countMatchesForReport(report) };
+    }),
+  );
 }
 
-function significantWords(text: string): string[] {
-  return text
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((word) => word.length >= 3);
+/** Recount matches on demand (cheap: candidate window capped at 50). */
+export async function countMatchesForReport(report: LostReportDto): Promise<number> {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(foundItems)
+    .where(
+      and(
+        eq(foundItems.category, report.category),
+        gte(foundItems.foundDate, report.dateLost),
+      ),
+    )
+    .limit(50);
+  const reportInput = {
+    category: report.category,
+    description: report.description,
+    locationLost: report.locationLost,
+    dateLost: report.dateLost,
+  };
+  return rankMatches(
+    reportInput,
+    rows.map((row) => toItemDto(row)),
+    50,
+  ).length;
 }
 
 /**
- * Structured possible matches for a report: same category, word overlap
- * with the description, and the item was logged on/after the loss date.
+ * Structured possible matches for a report, scored by the shared engine.
+ * Returns the top candidates with explainable reasons — no AI, no image
+ * similarity.
  */
 export async function findMatchesForReport(
   report: LostReportDto,
   limit = 5,
-): Promise<FoundItemDto[]> {
+): Promise<ReportMatch[]> {
   const db = getDb();
   const rows = await db
     .select()
@@ -98,18 +157,24 @@ export async function findMatchesForReport(
     .orderBy(desc(foundItems.createdAt))
     .limit(50);
 
-  const reportWords = new Set(significantWords(report.description));
-  const scored = rows
-    .map((row) => {
-      const item = toItemDto(row);
-      const itemWords = significantWords(`${item.name} ${item.location}`);
-      const overlap = itemWords.filter((w) => reportWords.has(w)).length;
-      return { item, overlap };
-    })
-    .filter(({ overlap }) => overlap > 0)
-    .sort((a, b) => b.overlap - a.overlap)
-    .slice(0, limit);
-  return scored.map(({ item }) => item);
+  const reportInput = {
+    category: report.category,
+    description: report.description,
+    locationLost: report.locationLost,
+    dateLost: report.dateLost,
+  };
+  const candidates = rankMatches(
+    reportInput,
+    rows.map((row) => toItemDto(row)),
+    limit,
+  );
+  // Candidates carry the full FoundItemDto (toItemDto output satisfies
+  // MatchItemInput), so map back to the enriched ReportMatch shape.
+  return candidates.map(({ item, score, reasons }) => ({
+    item: item as FoundItemDto,
+    score,
+    reasons,
+  }));
 }
 
 /** Mark a report as matched once a claim is submitted against it. */

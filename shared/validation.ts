@@ -55,6 +55,32 @@ export const logFoundItemSchema = z.object({
 
 export type LogFoundItemInput = z.infer<typeof logFoundItemSchema>;
 
+/**
+ * Report a Lost Item form contract (Phase 4).
+ * Mirrors the on-screen fields: category, description, date, location,
+ * optional reference photo. Same zod instance validates server-side
+ * (tRPC reports.create) and client-side (form field errors).
+ */
+export const reportLostItemSchema = z.object({
+  category: z.enum(ITEM_CATEGORIES, {
+    message: "Select a category",
+  }),
+  description: z
+    .string()
+    .trim()
+    .min(10, "Description must be at least 10 characters")
+    .max(2000, "Description must be 2000 characters or fewer"),
+  dateLost: isoDate,
+  locationLost: z
+    .string()
+    .trim()
+    .min(2, "Location must be at least 2 characters")
+    .max(160, "Location must be 160 characters or fewer"),
+  imageUrl: z.string().url("Photo must be a valid URL").nullish(),
+});
+
+export type ReportLostItemInput = z.infer<typeof reportLostItemSchema>;
+
 /** QR payload contract: CLM-XXXX-XXXX-XXXXXXXX (opaque, not sequential). */
 export const QR_CODE_PATTERN = /^CLM-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{16}$/;
 

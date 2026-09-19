@@ -21,6 +21,9 @@ import {
 } from "@/components/icons";
 import {
   ClaimItService,
+  type FoundItem,
+  type LostReport as LostReportFacade,
+  type ReportMatchFacade,
   type TagData,
 } from "@/lib/claimit-service";
 import { renderTagHtml } from "@/lib/tag-html";
@@ -28,6 +31,8 @@ import { printTag } from "@/lib/tag-printer";
 import {
   formatIssues,
   logFoundItemSchema,
+  reportLostItemSchema,
+  ITEM_CATEGORIES,
 } from "@/shared/validation";
 
 type ScreenKey =
@@ -79,11 +84,6 @@ const foundItems = [
   { id: "3", name: "Silver Smartphone", category: "Electronics", location: "Riverside Park", date: "Apr 24, 2025", status: "Pending", image: IMAGES.phone },
 ];
 
-const matchItems = [
-  { id: "m1", name: "iPhone 13 Pro with Black Case", category: "Electronics", location: "Riverside Park (North Entrance)", date: "Apr 26, 2025", image: IMAGES.phone },
-  { id: "m2", name: "The North Face Backpack", category: "Bags & Backpacks", location: "Central Library (Main Floor)", date: "Apr 25, 2025", image: IMAGES.backpack },
-];
-
 const staffItems = [
   { id: "s1", name: "Backpack", category: "Bags & Luggage", date: "Apr 26, 2025", status: "Returned", image: IMAGES.backpack },
   { id: "s2", name: "iPhone 14", category: "Electronics", date: "Apr 25, 2025", status: "Returned", image: IMAGES.phone },
@@ -99,6 +99,21 @@ const auditEvents = [
 ] as const;
 
 /* ---------------------------------- shared ---------------------------------- */
+
+/** The most recently created lost report (drives the Matches screen). */
+let activeReportId: string | null = null;
+
+/** The match the student tapped "This is mine" on (drives Claim Verification). */
+let activeMatch: FoundItem | null = null;
+
+/** Format an ISO date like "Apr 26, 2025" for card display. */
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
 type AlertPayload = { title: string; message: string } | null;
 const alertListeners = new Set<(next: AlertPayload) => void>();
@@ -379,6 +394,19 @@ const categoryChips: { label: string; icon: LineIconName }[] = [
 
 function StudentHome({ go }: { go: (screen: ScreenKey) => void }) {
   const [category, setCategory] = useState("All");
+  // Phase 4: live lost reports drive the "My Lost Reports" card.
+  const [latestReport, setLatestReport] = useState<
+    (LostReportFacade & { matchCount: number }) | null
+  >(null);
+  useEffect(() => {
+    let alive = true;
+    void ClaimItService.listMyReports().then((reports) => {
+      if (alive) setLatestReport(reports[0] ?? null);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
   return (
     <ScreenContainer className="px-0" containerClassName="bg-app-bg">
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }}>
@@ -509,19 +537,33 @@ function StudentHome({ go }: { go: (screen: ScreenKey) => void }) {
                 className="h-14 w-14 flex-shrink-0 rounded-2xl bg-slate-100"
               />
               <View className="min-w-0">
-                <Text className="truncate text-sm font-bold text-slate-900">Black Backpack</Text>
+                <Text className="truncate text-sm font-bold text-slate-900">
+                  {latestReport ? latestReport.category : "Black Backpack"}
+                </Text>
                 <View className="mt-0.5 flex-row items-center gap-1.5">
                   <LineIcon name="map-pin" size={12} color="#94A3B8" />
-                  <Text className="text-xs text-slate-400">Campus</Text>
+                  <Text className="text-xs text-slate-400">
+                    {latestReport ? latestReport.locationLost : "Campus"}
+                  </Text>
                 </View>
                 <View className="mt-0.5 flex-row items-center gap-1.5">
                   <LineIcon name="calendar" size={12} color="#94A3B8" />
-                  <Text className="text-xs text-slate-400">Apr 24, 2025</Text>
+                  <Text className="text-xs text-slate-400">
+                    {latestReport ? formatDate(latestReport.dateLost) : "Apr 24, 2025"}
+                  </Text>
                 </View>
               </View>
             </View>
             <View className="flex-shrink-0 flex-row items-center gap-2 pl-2">
-              <Pill label="Possible match found" tone="amber" icon="search" />
+              <Pill
+                label={
+                  latestReport && latestReport.matchCount > 0
+                    ? `${latestReport.matchCount} possible match${latestReport.matchCount === 1 ? "" : "es"}`
+                    : "Possible match found"
+                }
+                tone="amber"
+                icon="search"
+              />
               <LineIcon name="chevron-right" size={16} color="#94A3B8" />
             </View>
           </Pressable>
@@ -553,7 +595,54 @@ function FormCard({ label, children }: { label: React.ReactNode; children: React
 }
 
 function ReportLost({ go }: { go: (screen: ScreenKey) => void }) {
+  // Phase 4: stateful form validated by the shared reportLostItemSchema —
+  // same approved layout, errors under each card, submit persists via API.
+  const [category, setCategory] = useState<string>("");
   const [description, setDescription] = useState("");
+  const [dateLost, setDateLost] = useState("");
+  const [locationLost, setLocationLost] = useState("");
+  const [showCategory, setShowCategory] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+
+  const fieldError = (key: string) =>
+    errors[key] ? (
+      <Text className="mt-1.5 px-1 text-xs font-medium text-red-500">{errors[key]}</Text>
+    ) : null;
+
+  const submit = async () => {
+    const parsed = reportLostItemSchema.safeParse({
+      category: category || undefined,
+      description,
+      dateLost: dateLost ? new Date(dateLost).toISOString() : new Date().toISOString(),
+      locationLost,
+    });
+    if (!parsed.success) {
+      setErrors(formatIssues(parsed.error));
+      return;
+    }
+    setErrors({});
+    setSubmitting(true);
+    try {
+      const report = await ClaimItService.createLostReport({
+        category: parsed.data.category,
+        description: parsed.data.description,
+        dateLost: parsed.data.dateLost,
+        locationLost: parsed.data.locationLost,
+      });
+      activeReportId = report.id;
+      showAlert(
+        "Report Filed",
+        "We will notify you when possible matches are found.",
+      );
+      go("matches");
+    } catch (error) {
+      showAlert("Could not file report", error instanceof Error ? error.message : "Try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <ScreenContainer className="px-0" containerClassName="bg-app-bg">
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
@@ -563,16 +652,18 @@ function ReportLost({ go }: { go: (screen: ScreenKey) => void }) {
         </Text>
         <View className="gap-3.5 px-5">
           <FormCard label="Category">
-            <View className="relative flex-row items-center">
-              <TextInput
-                placeholder="Select a category"
-                placeholderTextColor="#64748B"
-                className="flex-1 rounded-xl border border-[#E2E8F0] px-3.5 py-3 text-[15px] text-slate-500"
-              />
-              <View className="absolute right-3.5">
-                <LineIcon name="chevron-right" size={16} color="#334155" strokeWidth={2.2} />
-              </View>
-            </View>
+            <Pressable
+              onPress={() => setShowCategory(true)}
+              className="flex-row items-center justify-between rounded-xl border border-[#E2E8F0] px-3.5 py-3"
+            >
+              <Text
+                className={`text-[15px] ${category ? "text-slate-700" : "text-slate-400"}`}
+              >
+                {category || "Select a category"}
+              </Text>
+              <LineIcon name="chevron-right" size={16} color="#334155" strokeWidth={2.2} />
+            </Pressable>
+            {fieldError("category")}
           </FormCard>
           <FormCard label="Item description">
             <TextInput
@@ -584,6 +675,7 @@ function ReportLost({ go }: { go: (screen: ScreenKey) => void }) {
               className="resize-none rounded-xl border border-[#E2E8F0] px-3.5 py-3 text-[15px] text-slate-700"
               textAlignVertical="top"
             />
+            {fieldError("description")}
           </FormCard>
           <FormCard label="Date lost">
             <View className="relative flex-row items-center">
@@ -591,11 +683,14 @@ function ReportLost({ go }: { go: (screen: ScreenKey) => void }) {
                 <LineIcon name="calendar" size={20} color="#64748B" strokeWidth={1.8} />
               </View>
               <TextInput
+                value={dateLost}
+                onChangeText={setDateLost}
                 placeholder="e.g. Apr 26, 2025"
                 placeholderTextColor="#94A3B8"
                 className="flex-1 rounded-xl border border-[#E2E8F0] py-3 pl-11 pr-3.5 text-[15px] text-slate-700"
               />
             </View>
+            {fieldError("dateLost")}
           </FormCard>
           <FormCard label="Location lost">
             <View className="relative flex-row items-center">
@@ -603,11 +698,14 @@ function ReportLost({ go }: { go: (screen: ScreenKey) => void }) {
                 <LineIcon name="map-pin" size={20} color="#64748B" strokeWidth={1.8} />
               </View>
               <TextInput
+                value={locationLost}
+                onChangeText={setLocationLost}
                 placeholder="e.g. Library, Building A"
                 placeholderTextColor="#94A3B8"
                 className="flex-1 rounded-xl border border-[#E2E8F0] py-3 pl-11 pr-3.5 text-[15px] text-slate-700"
               />
             </View>
+            {fieldError("locationLost")}
           </FormCard>
           <FormCard
             label={
@@ -633,8 +731,44 @@ function ReportLost({ go }: { go: (screen: ScreenKey) => void }) {
           </View>
         </View>
         <View className="px-5 pt-4">
-          <PrimaryButton label="Submit Report" onPress={() => go("matches")} rounded={false} />
+          <PrimaryButton
+            label={submitting ? "Submitting..." : "Submit Report"}
+            onPress={submit}
+            rounded={false}
+          />
         </View>
+        {showCategory && (
+          <Pressable
+            onPress={() => setShowCategory(false)}
+            className="absolute inset-0 z-40 justify-end bg-black/30"
+          >
+            <Pressable className="rounded-t-3xl bg-white px-5 pb-10 pt-5">
+              <Text className="mb-3 text-lg font-bold text-[#0B2545]">Select a category</Text>
+              <View className="flex-row flex-wrap gap-2">
+                {ITEM_CATEGORIES.map((c) => (
+                  <Pressable
+                    key={c}
+                    onPress={() => {
+                      setCategory(c);
+                      setShowCategory(false);
+                    }}
+                    className={`rounded-full px-4 py-2.5 ${
+                      category === c ? "bg-teal-600" : "border border-slate-200 bg-white"
+                    }`}
+                  >
+                    <Text
+                      className={`text-sm font-semibold ${
+                        category === c ? "text-white" : "text-slate-700"
+                      }`}
+                    >
+                      {c}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </Pressable>
+          </Pressable>
+        )}
       </ScrollView>
       <BottomNav role="student" active="report-lost" go={go} />
     </ScreenContainer>
@@ -644,11 +778,39 @@ function ReportLost({ go }: { go: (screen: ScreenKey) => void }) {
 /* --------------------------------- matches --------------------------------- */
 
 function Matches({ go }: { go: (screen: ScreenKey) => void }) {
+  // Phase 4: real structured matches for the active report (category +
+  // description scoring from the server). Mock fallback in prototype mode.
+  const [matches, setMatches] = useState<ReportMatchFacade[] | null>(null);
+  const [report, setReport] = useState<LostReportFacade | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      const reports = await ClaimItService.listMyReports();
+      if (!alive) return;
+      const current =
+        reports.find((r) => r.id === activeReportId) ?? reports[0] ?? null;
+      setReport(current);
+      if (!current) {
+        setMatches([]);
+        return;
+      }
+      const found = await ClaimItService.findMatches(current.id);
+      if (alive) setMatches(found);
+    };
+    void load();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const loading = matches === null;
+
   return (
     <ScreenContainer className="px-0" containerClassName="bg-app-bg">
       <FlatList
-        data={matchItems}
-        keyExtractor={(item) => item.id}
+        data={matches ?? []}
+        keyExtractor={(m) => m.item.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 16 }}
         ListHeaderComponent={
@@ -660,10 +822,42 @@ function Matches({ go }: { go: (screen: ScreenKey) => void }) {
             <Text className="mt-3 text-3xl font-extrabold tracking-tight text-[#0B2545]">
               Possible Matches
             </Text>
-            <Text className="mt-1 text-[15px] font-normal leading-snug text-slate-500">
-              We found items that may match your lost report.
-            </Text>
+            {report ? (
+              <Text className="mt-1 text-[15px] font-normal leading-snug text-slate-500">
+                Structured matches for your lost {report.category.toLowerCase()} —
+                {matches?.length
+                  ? ` ${matches.length} found`
+                  : " none yet, we will keep watching"}.
+              </Text>
+            ) : (
+              <Text className="mt-1 text-[15px] font-normal leading-snug text-slate-500">
+                We found items that may match your lost report.
+              </Text>
+            )}
           </View>
+        }
+        ListEmptyComponent={
+          loading ? null : (
+            <View className="mx-5 items-center rounded-3xl border border-slate-100 bg-white p-8">
+              <View className="mb-3 h-14 w-14 items-center justify-center rounded-full bg-amber-50">
+                <LineIcon name="search" size={26} color="#F59E0B" strokeWidth={2} />
+              </View>
+              <Text className="text-base font-bold text-[#0B2545]">
+                No matches yet
+              </Text>
+              <Text className="mt-1 text-center text-[13px] leading-snug text-slate-500">
+                {report
+                  ? "When staff log an item matching your category and description, it will appear here."
+                  : "File a lost report first — then matching items will appear here automatically."}
+              </Text>
+              <Pressable
+                onPress={() => go("report-lost")}
+                className="mt-4 rounded-full bg-[#0B2545] px-5 py-2.5"
+              >
+                <Text className="text-sm font-semibold text-white">Report Lost Item</Text>
+              </Pressable>
+            </View>
+          )
         }
         renderItem={({ item }) => (
           <View
@@ -672,14 +866,18 @@ function Matches({ go }: { go: (screen: ScreenKey) => void }) {
           >
             <View className="flex-row gap-4">
               <Image
-                source={{ uri: item.image }}
+                source={
+                  item.item.imageUrl
+                    ? { uri: item.item.imageUrl }
+                    : { uri: IMAGES.backpack }
+                }
                 className="h-48 w-36 flex-shrink-0 rounded-2xl bg-slate-100"
               />
               <View className="flex-1 justify-between">
                 <View>
-                  <Pill label="Possible Match" tone="amber" icon="clock" />
+                  <Pill label={`Possible Match · ${item.score}%`} tone="amber" icon="clock" />
                   <Text className="mt-2 text-lg font-bold leading-tight text-[#0B2545]">
-                    {item.name}
+                    {item.item.name}
                   </Text>
                   <View className="mt-3 gap-2">
                     <View className="flex-row items-start gap-2">
@@ -689,7 +887,7 @@ function Matches({ go }: { go: (screen: ScreenKey) => void }) {
                           Category
                         </Text>
                         <Text className="text-xs font-medium leading-tight text-slate-700">
-                          {item.category}
+                          {item.item.category}
                         </Text>
                       </View>
                     </View>
@@ -700,7 +898,7 @@ function Matches({ go }: { go: (screen: ScreenKey) => void }) {
                           Found location
                         </Text>
                         <Text className="text-xs font-medium leading-tight text-slate-700" numberOfLines={1}>
-                          {item.location}
+                          {item.item.location}
                         </Text>
                       </View>
                     </View>
@@ -711,17 +909,28 @@ function Matches({ go }: { go: (screen: ScreenKey) => void }) {
                           Found date
                         </Text>
                         <Text className="text-xs font-medium leading-tight text-slate-700">
-                          {item.date}
+                          {formatDate(item.item.foundDate)}
                         </Text>
                       </View>
                     </View>
+                    {item.reasons.length > 0 && (
+                      <View className="flex-row items-start gap-2">
+                        <LineIcon name="check" size={14} color="#059669" />
+                        <Text className="flex-1 text-[11px] leading-snug text-emerald-700">
+                          {item.reasons.join(" · ")}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 </View>
               </View>
             </View>
             <View className="mt-4 flex-row gap-3 pt-1">
               <Pressable
-                onPress={() => go("claim-verification")}
+                onPress={() => {
+                  activeMatch = item.item;
+                  go("claim-verification");
+                }}
                 className="flex-1 items-center justify-center rounded-full bg-[#0B2545] py-3"
               >
                 <Text className="text-sm font-semibold text-white">This is mine</Text>
@@ -740,29 +949,68 @@ function Matches({ go }: { go: (screen: ScreenKey) => void }) {
 
 /* ----------------------------- claim verification ---------------------------- */
 
-function ClaimVerification({ go }: { go: (screen: ScreenKey) => void }) {
+function ClaimVerification({
+  go,
+  match,
+}: {
+  go: (screen: ScreenKey) => void;
+  match?: FoundItem | null;
+}) {
+  // Phase 4: pre-fill the verification prompt from the matched item's
+  // description when the claim originates from a lost-report match.
   const [answer, setAnswer] = useState(
-    "Small astronomy patch on the front pocket",
+    match?.description
+      ? `${match.name}: ${match.description}`
+      : "Small astronomy patch on the front pocket",
   );
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async () => {
+    setSubmitting(true);
+    try {
+      if (match) {
+        await ClaimItService.submitClaim({
+          foundItemId: match.id,
+          verificationAnswer: answer,
+          lostReportId: activeReportId,
+        });
+      }
+      setSubmitted(true);
+      showAlert(
+        "Claim Submitted",
+        "Our staff will verify your claim and get back to you.",
+      );
+    } catch (error) {
+      showAlert(
+        "Could not submit claim",
+        error instanceof Error ? error.message : "Try again.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <ScreenContainer className="px-5" containerClassName="bg-app-bg">
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
         <HeaderBar title="Verify Your Claim" onBack={() => go("matches")} />
         <View className="mt-3 flex-row items-center gap-4 rounded-[22px] bg-white p-4 shadow-card">
           <Image
-            source={{ uri: IMAGES.backpack }}
+            source={match?.imageUrl ? { uri: match.imageUrl } : { uri: IMAGES.backpack }}
             className="h-[148px] w-[140px] flex-shrink-0 rounded-xl bg-slate-100"
           />
           <View className="flex-1 justify-center pr-1">
             <Text className="text-xl font-bold leading-snug tracking-tight text-[#0c1a2e]">
-              Navy Backpack
+              {match?.name ?? "Navy Backpack"}
             </Text>
-            <Text className="mt-1 text-sm font-medium text-slate-500">Bags</Text>
+            <Text className="mt-1 text-sm font-medium text-slate-500">
+              {match?.category ?? "Bags"}
+            </Text>
             <View className="mt-3 flex-row items-center">
               <LineIcon name="map-pin" size={16} color="#94A3B8" />
               <Text className="ml-1.5 text-xs text-slate-500" numberOfLines={1}>
-                Library · 2nd floor
+                {match?.location ?? "Library · 2nd floor"}
               </Text>
             </View>
           </View>
@@ -783,7 +1031,10 @@ function ClaimVerification({ go }: { go: (screen: ScreenKey) => void }) {
           </Text>
         </View>
         <View className="pt-2">
-          <PrimaryButton label="Submit Claim" onPress={() => setSubmitted(true)} />
+          <PrimaryButton
+            label={submitting ? "Submitting..." : submitted ? "Claim Submitted" : "Submit Claim"}
+            onPress={submit}
+          />
         </View>
         {submitted && (
           <View className="mt-2 flex-row items-start gap-3.5 rounded-2xl border border-[#d1f2e4] bg-[#ecfbf4] p-4 shadow-sm">
@@ -1590,7 +1841,7 @@ export default function ClaimItApp() {
           case "matches":
             return <Matches go={go} />;
           case "claim-verification":
-            return <ClaimVerification go={go} />;
+            return <ClaimVerification go={go} match={activeMatch} />;
           case "staff-home":
             return <StaffHome go={go} />;
           case "log-found":

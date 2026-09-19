@@ -10,7 +10,7 @@
 | 1 | UI and interaction prototype | Review | All 11 screens ported from the approved UI code into `app/(tabs)/index.tsx` on Expo SDK 57, then **redesigned to the approved 9-screen HTML mockups** (new palette, SVG icon set, pin/heart brand marks, QR artwork, scan reticle, audit timeline). Every screen verified live at a mobile viewport (student and staff, incl. release confirmation state). Evidence: `pnpm check`, `pnpm test -- --run` (5/5), `pnpm lint`, Android + web Metro bundles, `expo install --check` up to date, and an interactive browser review. See the frozen UI contract below. |
 | 2 | Backend and database foundation | Review | Schema, migration, auth, and typed tRPC API implemented on Neon PostgreSQL; workflow rules unit-tested (12/12). UI unchanged; screens connect in Phases 3–6. See Phase 2 evidence below. |
 | 3 | Staff logging and QR tags | Review | Shared validation contract, collision-safe QR payloads, PNG tag rendering + printing, audit FOUND persistence. Live E2E 12/12 incl. duplicate/missing/invalid cases. See Phase 3 evidence below. |
-| 4 | Student reports and structured matches | Not started | Connect Report Lost Item and Possible Matches. |
+| 4 | Student reports and structured matches | Review | Lost reports persisted; rule-based matching (category + description/name/location coverage + recency, no AI) in `shared/matching.ts`; Possible Matches UI live with scored, explainable matches and an empty state; MATCH_FOUND notifications; claim → MATCHED link. Unit tests 30/30; live E2E 12/12 incl. no-match gates. See Phase 4 evidence below. |
 | 5 | QR-verified release | Not started | Connect camera scanning and enforce release on the API. |
 | 6 | Push notifications | Not started | Connect probable-match notifications through Expo. |
 | 7 | Audit and reporting | Not started | Persist and query the audit timeline. |
@@ -95,9 +95,19 @@ One application shell (`app/(tabs)/index.tsx`) holds a `ScreenKey` union of 11 s
 
 ### Review findings (deferred, UI-only)
 
-- The matches empty state ("No possible matches yet") is not implemented because mock data always renders two matches; add it when real matching lands in Phase 4.
+- ~~The matches empty state ("No possible matches yet") is not implemented because mock data always renders two matches; add it when real matching lands in Phase 4.~~ **Resolved in Phase 4**: the empty state ships with real matching (offers Report Lost Item when no report exists yet).
 - "Not mine" has no destination by design; confirm with stakeholders whether it should dismiss the match.
 - Notification Settings and Help & Support rows are placeholders without destinations.
+
+## Phase 4 evidence (2026-09-19)
+
+- **Structured matching engine** (`shared/matching.ts`, shared by server and tests): category equality and found-after-loss are hard gates; scoring is 30 pts category + up to 30 name coverage + up to 15 description/location coverage + up to 15 location similarity + up to 10 recency. Stop-word filtered, explainable reasons only — **no image similarity, no AI** (proposal exclusion).
+- **Descriptions persisted**: `found_items.description` column added and pushed to Neon; Log Found form already collected it, matching now consumes it.
+- **Report contract**: `reportLostItemSchema` (shared/validation.ts) validates `reports.create` server-side and the Report Lost Item form client-side (min 10-char description, category enum, valid date, 160-char location).
+- **API**: `reports.create/mine/matches` — `mine` now carries a live `matchCount` per report; `matches` returns scored candidates with reasons; MATCH_FOUND notifications fire on report creation when items already match.
+- **UI (layouts unchanged)**: Report Lost Item is stateful with inline validation and a category sheet; Possible Matches renders real scored matches (`Possible Match · NN%` pill, reason line) with an empty state; Claim Verification pre-fills the distinctive-detail answer from the item description and links the claim to the originating report; the Home "My Lost Reports" card shows the latest report with its live match count.
+- **Tests**: unit 30/30 (matcher match/no-match matrix, validation contract, workflow rules); live E2E vs API + Neon 12/12 — match ranked (score 71) with reasons, pre-loss item excluded, wrong-category item excluded, matches sorted strongest-first, `matchCount=2` on `reports.mine`, MATCH_FOUND notifications persisted (2), short description and invalid category rejected, claim links report → status MATCHED. Test rows cleaned up.
+- **Gates**: `pnpm check` ✓ · `pnpm lint` 0 problems ✓ · `pnpm test -- --run` 30/30 ✓ · web export ✓.
 
 ## Current UI acceptance checklist
 
